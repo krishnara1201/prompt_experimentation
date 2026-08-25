@@ -1,0 +1,22 @@
+# Pricing figures below are illustrative — verify against each provider's
+# current pricing page before using cost_estimate_usd for real comparisons.
+arms:
+  - name: qwen3-8b-local
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+
+  - name: gpt-4o-mini
+    adapter: openai_compatible
+    base_url: https://api.openai.com/v1
+    model: gpt-4o-mini
+    api_key_env: OPENAI_API_KEY
+    price_per_1m_input: 0.15
+    price_per_1m_output: 0.60
+
+  - name: claude-haiku
+    adapter: anthropic
+    model: claude-haiku-4-5-20251001
+    api_key_env: ANTHROPIC_API_KEY
+    price_per_1m_input: 1.00
+    price_per_1m_output: 5.00
