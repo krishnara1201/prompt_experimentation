@@ -14,35 +14,49 @@ class OpenAICompatibleAdapter:
         api_key_env: str | None = None,
         price_per_1m_input: float | None = None,
         price_per_1m_output: float | None = None,
+        max_tokens: int | None = None,
         timeout: float = 60.0,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
-        self.api_key = os.environ.get(api_key_env) if api_key_env else None
+        self.api_key_env = api_key_env
         self.price_per_1m_input = price_per_1m_input
         self.price_per_1m_output = price_per_1m_output
+        self.max_tokens = max_tokens
         self.timeout = timeout
 
     def generate(self, prompt: str) -> ModelResponse:
+        api_key = os.environ.get(self.api_key_env) if self.api_key_env else None
+        if self.api_key_env and not api_key:
+            raise RuntimeError(
+                f"No API key found in environment variable '{self.api_key_env}'"
+            )
+
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if self.max_tokens is not None:
+            payload["max_tokens"] = self.max_tokens
 
         start = time.perf_counter()
         response = httpx.post(
             f"{self.base_url}/chat/completions",
             headers=headers,
-            json={
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-            },
+            json=payload,
             timeout=self.timeout,
         )
         response.raise_for_status()
         latency_ms = (time.perf_counter() - start) * 1000
         data = response.json()
 
-        text = data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        text = choice["message"]["content"]
+        finish_reason = choice.get("finish_reason")
         usage = data.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
@@ -60,4 +74,5 @@ class OpenAICompatibleAdapter:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cost_estimate_usd=cost_estimate_usd,
+            finish_reason=finish_reason,
         )

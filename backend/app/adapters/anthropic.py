@@ -56,6 +56,7 @@ class AnthropicAdapter:
         data = response.json()
 
         text = data["content"][0]["text"]
+        finish_reason = data.get("stop_reason")
         usage = data.get("usage", {})
         prompt_tokens = usage.get("input_tokens", 0)
         completion_tokens = usage.get("output_tokens", 0)
@@ -73,4 +74,5 @@ class AnthropicAdapter:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cost_estimate_usd=cost_estimate_usd,
+            finish_reason=finish_reason,
         )

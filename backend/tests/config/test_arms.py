@@ -2,7 +2,7 @@ import pytest
 
 from app.adapters.anthropic import AnthropicAdapter
 from app.adapters.openai_compatible import OpenAICompatibleAdapter
-from app.config.arms import UnknownAdapterError, load_arms
+from app.config.arms import InvalidArmConfigError, UnknownAdapterError, load_arms
 
 VALID_CONFIG = """
 arms:
@@ -32,6 +32,34 @@ arms:
   - name: mystery-arm
     adapter: telepathy
     model: mind-reader-v1
+"""
+
+MISSING_ARMS_KEY_CONFIG = """
+not_arms:
+  - name: qwen3-8b-local
+    adapter: openai_compatible
+"""
+
+MISSING_NAME_CONFIG = """
+arms:
+  - adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+"""
+
+MISSING_ADAPTER_CONFIG = """
+arms:
+  - name: qwen3-8b-local
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+"""
+
+UNEXPECTED_FIELD_CONFIG = """
+arms:
+  - name: qwen3-8b-local
+    adapter: openai_compatible
+    base_urls: http://localhost:11434/v1
+    model: qwen3:8b
 """
 
 
@@ -67,4 +95,36 @@ def test_load_arms_raises_on_unknown_adapter_type(tmp_path):
     config_path.write_text(INVALID_CONFIG)
 
     with pytest.raises(UnknownAdapterError):
+        load_arms(str(config_path))
+
+
+def test_load_arms_raises_when_arms_key_missing(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(MISSING_ARMS_KEY_CONFIG)
+
+    with pytest.raises(InvalidArmConfigError):
+        load_arms(str(config_path))
+
+
+def test_load_arms_raises_when_entry_missing_name(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(MISSING_NAME_CONFIG)
+
+    with pytest.raises(InvalidArmConfigError):
+        load_arms(str(config_path))
+
+
+def test_load_arms_raises_when_entry_missing_adapter(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(MISSING_ADAPTER_CONFIG)
+
+    with pytest.raises(InvalidArmConfigError):
+        load_arms(str(config_path))
+
+
+def test_load_arms_raises_on_unexpected_field_for_adapter(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(UNEXPECTED_FIELD_CONFIG)
+
+    with pytest.raises(InvalidArmConfigError):
         load_arms(str(config_path))

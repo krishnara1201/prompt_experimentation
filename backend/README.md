@@ -7,8 +7,10 @@ at the repo root for the design.
 
 ## Setup
 
+All commands in this README assume the current directory is `backend/`.
+
 ```bash
-uv sync
+cd backend && uv sync
 cp .env.example .env   # fill in whichever API keys you have; local Ollama needs none
 ```
 

@@ -1,5 +1,11 @@
+from pathlib import Path
+
+from dotenv import load_dotenv
+
 from app.adapters.base import ModelResponse
 from app.config.arms import load_arms
+
+ARMS_PATH = Path(__file__).resolve().parent.parent / "arms.yaml"
 
 PROMPTS = [
     "What is the capital of France?",
@@ -26,7 +32,8 @@ def format_row(arm_name: str, prompt: str, response: ModelResponse) -> str:
 
 
 def main() -> None:
-    arms = load_arms("arms.yaml")
+    load_dotenv()
+    arms = load_arms(str(ARMS_PATH))
     for prompt in PROMPTS:
         for arm_name, adapter in arms.items():
             try:

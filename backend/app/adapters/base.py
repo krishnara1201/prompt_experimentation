@@ -9,6 +9,7 @@ class ModelResponse:
     prompt_tokens: int
     completion_tokens: int
     cost_estimate_usd: float | None = None
+    finish_reason: str | None = None
 
 
 class ModelAdapter(Protocol):

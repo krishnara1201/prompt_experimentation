@@ -9,6 +9,10 @@ class UnknownAdapterError(ValueError):
     pass
 
 
+class InvalidArmConfigError(ValueError):
+    pass
+
+
 ADAPTER_TYPES = {
     "openai_compatible": OpenAICompatibleAdapter,
     "anthropic": AnthropicAdapter,
@@ -19,8 +23,20 @@ def load_arms(config_path: str) -> dict[str, ModelAdapter]:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
 
+    if not isinstance(raw, dict) or not isinstance(raw.get("arms"), list):
+        raise InvalidArmConfigError(
+            f"'{config_path}' must be a mapping with a top-level 'arms' list"
+        )
+
     arms: dict[str, ModelAdapter] = {}
-    for entry in raw["arms"]:
+    for i, entry in enumerate(raw["arms"]):
+        if "name" not in entry:
+            raise InvalidArmConfigError(f"arms[{i}] is missing required key 'name'")
+        if "adapter" not in entry:
+            raise InvalidArmConfigError(
+                f"arm '{entry['name']}' is missing required key 'adapter'"
+            )
+
         entry = dict(entry)
         name = entry.pop("name")
         adapter_type = entry.pop("adapter")
@@ -31,6 +47,11 @@ def load_arms(config_path: str) -> dict[str, ModelAdapter]:
                 f"Unknown adapter type '{adapter_type}' for arm '{name}'"
             )
 
-        arms[name] = adapter_cls(**entry)
+        try:
+            arms[name] = adapter_cls(**entry)
+        except TypeError as exc:
+            raise InvalidArmConfigError(
+                f"arm '{name}' has invalid fields for adapter '{adapter_type}': {exc}"
+            ) from exc
 
     return arms

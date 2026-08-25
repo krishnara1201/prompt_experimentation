@@ -74,3 +74,23 @@ def test_generate_computes_cost_when_pricing_configured(monkeypatch):
     response = adapter.generate("hello")
 
     assert response.cost_estimate_usd == pytest.approx(6.00)
+
+
+@respx.mock
+def test_generate_sets_finish_reason_from_stop_reason(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": "hi"}],
+                "stop_reason": "max_tokens",
+                "usage": {},
+            },
+        )
+    )
+    adapter = AnthropicAdapter(model="claude-haiku-4-5-20251001")
+
+    response = adapter.generate("hello")
+
+    assert response.finish_reason == "max_tokens"

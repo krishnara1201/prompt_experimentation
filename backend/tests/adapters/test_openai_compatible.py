@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 import respx
@@ -100,3 +102,69 @@ def test_generate_omits_auth_header_without_api_key_env():
     adapter.generate("hello")
 
     assert "Authorization" not in route.calls.last.request.headers
+
+
+def test_generate_raises_when_api_key_env_set_but_missing(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    adapter = OpenAICompatibleAdapter(
+        base_url="https://api.openai.com/v1",
+        model="gpt-4o-mini",
+        api_key_env="OPENAI_API_KEY",
+    )
+
+    with pytest.raises(RuntimeError):
+        adapter.generate("hello")
+
+
+@respx.mock
+def test_generate_includes_max_tokens_when_configured():
+    route = respx.post("http://localhost:11434/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "hi"}}], "usage": {}},
+        )
+    )
+    adapter = OpenAICompatibleAdapter(
+        base_url="http://localhost:11434/v1", model="qwen3:8b", max_tokens=1024
+    )
+
+    adapter.generate("hello")
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["max_tokens"] == 1024
+
+
+@respx.mock
+def test_generate_omits_max_tokens_when_not_configured():
+    route = respx.post("http://localhost:11434/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "hi"}}], "usage": {}},
+        )
+    )
+    adapter = OpenAICompatibleAdapter(base_url="http://localhost:11434/v1", model="qwen3:8b")
+
+    adapter.generate("hello")
+
+    body = json.loads(route.calls.last.request.content)
+    assert "max_tokens" not in body
+
+
+@respx.mock
+def test_generate_sets_finish_reason_from_response():
+    respx.post("http://localhost:11434/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": "hi"}, "finish_reason": "length"}
+                ],
+                "usage": {},
+            },
+        )
+    )
+    adapter = OpenAICompatibleAdapter(base_url="http://localhost:11434/v1", model="qwen3:8b")
+
+    response = adapter.generate("hello")
+
+    assert response.finish_reason == "length"
