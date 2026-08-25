@@ -1,0 +1,18 @@
+[project]
+name = "prompt-experimentation-backend"
+version = "0.1.0"
+description = "Model adapter layer for the LLM prompt-experimentation platform"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "respx>=0.21",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
