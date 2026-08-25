@@ -43,13 +43,18 @@ a local model and hosted API models.
 - **Eval dataset** — a public financial sentiment benchmark (Financial
   PhraseBank or FiQA): labeled, sentence-level, expert-agreement sentiment.
   Avoids building/labeling a gold set from scratch.
-- **Model arms** — a unified adapter interface (OpenAI-compatible chat
-  completions signature) so local and API models are interchangeable behind
-  one code path.
-  - Local: Ollama serving **Qwen3-8B** by default. Swap to **gpt-oss-20b** if
-    16GB+ VRAM is available, or **Phi-4-mini** / Qwen3-4B if CPU-only.
-    *(open decision — see below)*
-  - API: Claude Haiku and GPT-4o-mini as hosted comparison arms.
+- **Model arms** — two adapter implementations behind a shared `ModelAdapter`
+  protocol, not one per provider: `OpenAICompatibleAdapter` (any provider
+  speaking the OpenAI chat-completions schema — Ollama, OpenAI, OpenRouter,
+  Groq, etc.) and `AnthropicAdapter` (Claude's distinct schema). Arms are
+  declared in `backend/arms.yaml`, never hardcoded in code — model-agnostic,
+  bring-your-own-key: adding or swapping a provider is a config edit. Built
+  in Phase 1 (see Build phases below); design doc at
+  `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`.
+  - Local: Ollama serving **Qwen3-8B** by default (confirmed: <16GB VRAM GPU).
+  - API: model-agnostic via config — `arms.yaml` currently has example arms
+    for GPT-4o-mini and Claude Haiku, but any OpenAI-schema or Anthropic
+    provider works without code changes.
 - **Orchestrator** — Celery + Redis, runs (eval set) × (arms) × (N repeats)
   as async jobs. Reuse the async job pattern from `experimentation_copilot`.
 - **Results store** — Postgres: raw prompts, outputs, judge scores, latency,
@@ -69,7 +74,11 @@ a local model and hosted API models.
 - Database: PostgreSQL, Alembic migrations
 - Local model serving: Ollama (OpenAI-compatible endpoint at
   `localhost:11434/v1`); consider vLLM later for batching/throughput
-- API models: Anthropic API (Claude Haiku), OpenAI API (GPT-4o-mini)
+- API models: model-agnostic, bring-your-own-key — any OpenAI-schema
+  provider (OpenAI, OpenRouter, Groq, etc.) plus Anthropic (Claude), declared
+  in `backend/arms.yaml`. Keys read from env vars named per-arm in that
+  config; `backend/.env.example` documents the ones the example arms use.
+  Package manager: `uv` (matches `experimentation_copilot`).
 - Frontend: TypeScript, React, Vite
 - Containerization: Docker
 - Stats: scipy/statsmodels for frequentist tests; match whatever Bayesian
@@ -86,9 +95,13 @@ a local model and hosted API models.
 
 ## Build phases
 
-1. **Model adapter layer** — unify local (Ollama) and API models behind one
-   interface; get one local + one API arm running end to end on a handful of
-   prompts.
+1. **Model adapter layer** ✅ **Done.** Unified local (Ollama) and API models
+   behind one interface (`backend/app/adapters/`), config-driven via
+   `backend/arms.yaml` (`backend/app/config/arms.py`). Demo script
+   (`backend/app/demo.py`) runs a handful of prompts through every configured
+   arm end to end. 27 tests passing, including a real (non-mocked) Ollama
+   e2e test. Spec: `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`;
+   plan: `docs/superpowers/plans/2026-08-25-model-adapter-layer.md`.
 2. **Orchestration** — wire Celery/Redis to run eval set × arms × repeats;
    persist raw outputs to Postgres.
 3. **Judge layer + calibration** — implement rubric-based LLM-as-judge; score
@@ -102,12 +115,19 @@ a local model and hosted API models.
 
 ## Open decisions
 
-- Confirm hardware (GPU/VRAM, or CPU-only) to lock the exact local model and
-  quantization level.
+- ~~Confirm hardware~~ **Resolved:** GPU with <16GB VRAM. Local model is
+  Qwen3-8B via Ollama (Phase 1, done).
+- ~~Confirm API arm approach~~ **Resolved:** model-agnostic, bring-your-own-key
+  via config (Phase 1, done) rather than hardcoding Claude Haiku/GPT-4o-mini
+  as fixed arms.
 - Confirm final task dataset (Financial PhraseBank vs. FiQA) once
   licensing/format is checked.
 - Confirm Bayesian library/approach to match — or deliberately diverge
-  from — `experimentation_copilot`'s existing implementation.
+  from — `experimentation_copilot`'s existing implementation. Note:
+  `experimentation_copilot/backend/app/stats/stat_analysis.py` is currently
+  purely frequentist (p-values, CI, SRM, Welch-Satterthwaite) — there is no
+  existing Bayesian code there to reuse, so this needs a fresh pick, not a
+  copy, when Phase 4 (stats layer) starts.
 
 ## Non-goals
 
