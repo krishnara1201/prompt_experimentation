@@ -1,0 +1,4 @@
+# comment header, should be skipped
+Profits rose to $5.2@million in Q3.@positive
+The company reported a loss.@negative
+Nothing changed this quarter.@neutral
