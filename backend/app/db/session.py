@@ -9,7 +9,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/prompt_experimentation",
+)
 
 engine = create_async_engine(DATABASE_URL)
 
