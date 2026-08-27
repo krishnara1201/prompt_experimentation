@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.config.arms import load_arms
 from app.db.models import EvalExample, Run, RunResult
@@ -18,7 +19,10 @@ ARMS_PATH = Path(__file__).resolve().parent.parent.parent.parent / "arms.yaml"
 
 
 class RunCreateRequest(BaseModel):
-    arms: list[str] | None = None
+    # None means "use every configured arm". An explicit empty list would
+    # produce total_calls == 0, a run that could never leave "pending", so
+    # it is rejected with a 422 rather than accepted as a degenerate run.
+    arms: list[str] | None = Field(default=None, min_length=1)
     sample_size: int | None = Field(default=None, gt=0)
     repeats: int = Field(default=1, ge=1)
     seed: int | None = None
@@ -47,7 +51,12 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
     if unknown:
         raise HTTPException(status_code=400, detail=f"Unknown arm(s): {', '.join(unknown)}")
 
-    result = await session.execute(select(EvalExample.id, EvalExample.text))
+    # ORDER BY is load-bearing: Postgres gives no row-order guarantee
+    # without it, so the same seed must sample from the same ordered list
+    # for a run to be reproducible.
+    result = await session.execute(
+        select(EvalExample.id, EvalExample.text).order_by(EvalExample.id)
+    )
     all_examples = result.all()
     if not all_examples:
         raise HTTPException(status_code=400, detail="No eval examples found; run the seed script first")
@@ -71,18 +80,32 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
     await session.commit()
     await session.refresh(run)
 
-    for example_id, example_text in chosen:
-        for arm_name in arm_names:
-            for repeat_index in range(payload.repeats):
-                run_single_call.delay(
-                    run_id=run.id,
-                    example_id=example_id,
-                    example_text=example_text,
-                    arm_name=arm_name,
-                    repeat_index=repeat_index,
-                )
+    run_id = run.id
 
-    return RunCreateResponse(run_id=run.id, status="pending", total_calls=total_calls)
+    def _enqueue_all() -> None:
+        for example_id, example_text in chosen:
+            for arm_name in arm_names:
+                for repeat_index in range(payload.repeats):
+                    run_single_call.delay(
+                        run_id=run_id,
+                        example_id=example_id,
+                        example_text=example_text,
+                        arm_name=arm_name,
+                        repeat_index=repeat_index,
+                    )
+
+    # .delay() is a synchronous Redis round-trip and there may be thousands
+    # of them, so it must not run on the event loop.
+    try:
+        await run_in_threadpool(_enqueue_all)
+    except Exception:
+        # A partial enqueue would leave a Run row whose total_calls can
+        # never be reached — stuck reporting pending/running forever.
+        await session.delete(run)
+        await session.commit()
+        raise
+
+    return RunCreateResponse(run_id=run_id, status="pending", total_calls=total_calls)
 
 
 @router.get("/{run_id}", response_model=RunStatusResponse)
@@ -123,7 +146,13 @@ async def get_run_status(run_id: int, session: AsyncSession = Depends(get_sessio
 async def get_run_results(
     run_id: int, limit: int = 100, offset: int = 0, session: AsyncSession = Depends(get_session)
 ):
+    # ORDER BY is required for offset/limit paging to be stable — without
+    # it pages can duplicate or skip rows.
     result = await session.execute(
-        select(RunResult).where(RunResult.run_id == run_id).offset(offset).limit(limit)
+        select(RunResult)
+        .where(RunResult.run_id == run_id)
+        .order_by(RunResult.id)
+        .offset(offset)
+        .limit(limit)
     )
     return result.scalars().all()

@@ -1,33 +1,19 @@
 import asyncio
-import socket
-from urllib.parse import urlsplit
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.models import EvalExample, Run, RunResult
-from app.db.session import DATABASE_URL, engine
-
-
-def _postgres_reachable() -> bool:
-    if not DATABASE_URL:
-        return False
-    parts = urlsplit(DATABASE_URL.replace("+asyncpg", ""))
-    try:
-        with socket.create_connection((parts.hostname or "localhost", parts.port or 5432), timeout=1):
-            return True
-    except OSError:
-        return False
-
+from tests.conftest import db_test_engine, postgres_reachable
 
 pytestmark = pytest.mark.skipif(
-    not _postgres_reachable(), reason="Postgres not running (see docker-compose.yml)"
+    not postgres_reachable(), reason="Postgres not running (see docker-compose.yml)"
 )
 
 
 def test_round_trip_insert_and_read():
     async def _run():
-        async with AsyncSession(engine) as session:
+        async with AsyncSession(db_test_engine) as session:
             example = EvalExample(text="Profits rose sharply.", gold_label="positive", source="test")
             session.add(example)
             await session.commit()

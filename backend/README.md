@@ -1,9 +1,14 @@
-# Backend — Model Adapter Layer
+# Backend
 
-Phase 1 of the LLM prompt-experimentation platform: a unified adapter
-interface so local (Ollama) and hosted API models are interchangeable
-behind one code path. See `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`
-at the repo root for the design.
+Phase 1 (model adapter layer) and Phase 2 (orchestration layer) of the LLM
+prompt-experimentation platform. Designs live at the repo root in
+`docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md` and
+`docs/superpowers/specs/2026-08-25-orchestration-layer-design.md`.
+
+## Phase 1: Model adapter layer
+
+A unified adapter interface so local (Ollama) and hosted API models are
+interchangeable behind one code path.
 
 ## Setup
 
@@ -33,6 +38,77 @@ works for Ollama and any provider using the OpenAI chat-completions schema
 (OpenAI, OpenRouter, Groq, Together, etc.); `adapter: anthropic` is for
 Claude models.
 
+## Phase 2: Orchestration
+
+Runs (eval set) × (arms) × (N repeats) as async Celery jobs and persists
+every call to Postgres.
+
+### 1. Start Postgres and Redis
+
+From the repo root (`docker-compose.yml` lives there):
+
+```bash
+docker compose up -d postgres redis
+```
+
+Set `POSTGRES_PASSWORD` in the repo-root `.env` first — compose refuses to
+start without it.
+
+### 2. Apply migrations
+
+```bash
+uv run alembic upgrade head
+```
+
+### 3. Seed the eval dataset
+
+Loads the vendored Financial PhraseBank all-agree sentences into
+`eval_example`. Idempotent — safe to re-run.
+
+```bash
+uv run python -m scripts.seed_eval_examples
+```
+
+If you are running everything through Docker Compose instead, seed with a
+one-off container against the same image (seeding is a one-time idempotent
+operation, not a service, so there is no `seed` service in the compose file):
+
+```bash
+docker compose run --rm migrate uv run python -m scripts.seed_eval_examples
+```
+
+### 4. Start the Celery worker
+
+```bash
+uv run celery -A app.tasks.worker.celery_app worker --loglevel=info
+```
+
+### 5. Start the API
+
+```bash
+uv run fastapi run app/main.py
+```
+
+Or bring the whole stack up at once: `docker compose up -d` (starts
+postgres, redis, migrations, the API on `:8000`, and the worker).
+
+### Endpoints
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /runs` | Create a run: picks the examples (optionally a seeded `sample_size` sample), fans out one Celery task per example × arm × repeat, returns `run_id` and `total_calls`. Body: `arms` (defaults to every arm in `arms.yaml`), `sample_size`, `repeats`, `seed`. |
+| `GET /runs/{run_id}` | Run status — derived from persisted results: `pending`, `running`, `completed`, or `completed_with_errors`, plus completed/failed/pending counts. |
+| `GET /runs/{run_id}/results` | Per-call rows for a run (output text, latency, tokens, cost, error), paginated with `limit` and `offset`. |
+
+Example:
+
+```bash
+curl -X POST localhost:8000/runs -H 'content-type: application/json' \
+  -d '{"sample_size": 20, "repeats": 3, "seed": 42}'
+curl localhost:8000/runs/1
+curl 'localhost:8000/runs/1/results?limit=50'
+```
+
 ## Tests
 
 ```bash
@@ -40,4 +116,5 @@ uv run pytest -v
 ```
 
 The Ollama end-to-end test skips automatically if Ollama isn't running
-locally.
+locally, and the database tests skip automatically if Postgres isn't
+reachable.

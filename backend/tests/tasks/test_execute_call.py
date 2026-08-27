@@ -1,5 +1,8 @@
 from unittest.mock import AsyncMock
 
+import httpx
+import pytest
+
 from app.adapters.base import ModelResponse
 from app.tasks import worker
 
@@ -68,3 +71,138 @@ def test_persists_failure_after_exhausting_retries(monkeypatch):
     _, kwargs = persist_mock.call_args
     assert kwargs["status"] == "failed"
     assert "boom" in kwargs["error_message"]
+
+
+def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", "https://example.test/v1/chat/completions")
+    response = httpx.Response(status_code, request=request)
+    return httpx.HTTPStatusError("boom", request=request, response=response)
+
+
+@pytest.mark.parametrize(
+    "exc, retryable",
+    [
+        (RuntimeError("No API key found in environment variable 'OPENAI_API_KEY'"), False),
+        (_http_status_error(400), False),
+        (_http_status_error(401), False),
+        (_http_status_error(404), False),
+        (_http_status_error(429), True),
+        (_http_status_error(500), True),
+        (_http_status_error(503), True),
+        (httpx.ConnectError("network down"), True),
+        (httpx.ReadTimeout("slow"), True),
+        (RuntimeError("transient blip"), True),
+    ],
+)
+def test_is_retryable_classification(exc, retryable):
+    assert worker.is_retryable(exc) is retryable
+
+
+def test_does_not_retry_missing_api_key(monkeypatch):
+    exc = RuntimeError("No API key found in environment variable 'OPENAI_API_KEY'")
+    adapter = FakeAdapter([exc] * 4)
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    sleep_calls = []
+    monkeypatch.setattr(worker.time, "sleep", lambda s: sleep_calls.append(s))
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    assert adapter.calls == 1  # no retries, no backoff sleep
+    assert sleep_calls == []
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "failed"
+    assert "No API key" in kwargs["error_message"]
+
+
+def test_does_not_retry_4xx(monkeypatch):
+    adapter = FakeAdapter([_http_status_error(400)] * 4)
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    sleep_calls = []
+    monkeypatch.setattr(worker.time, "sleep", lambda s: sleep_calls.append(s))
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    assert adapter.calls == 1
+    assert sleep_calls == []
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "failed"
+
+
+def test_still_retries_429(monkeypatch):
+    adapter = FakeAdapter([_http_status_error(429), _http_status_error(429), SUCCESS])
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    assert adapter.calls == 3
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "completed"
+
+
+def test_db_failure_after_success_does_not_retry_the_model_call(monkeypatch):
+    """A billed model call must never be repeated because the DB write failed."""
+    adapter = FakeAdapter([SUCCESS, SUCCESS, SUCCESS, SUCCESS])
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    persist_mock = AsyncMock(side_effect=OSError("postgres is down"))
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    with pytest.raises(OSError):
+        worker.execute_call(
+            run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0
+        )
+
+    assert adapter.calls == 1
+    assert persist_mock.await_count == 1
+
+
+def test_db_failure_on_terminal_persist_does_not_crash_the_task(monkeypatch, caplog):
+    adapter = FakeAdapter([RuntimeError("boom")] * 4)
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    monkeypatch.setattr(worker, "_persist_run_result", AsyncMock(side_effect=OSError("postgres is down")))
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    with caplog.at_level("ERROR"):
+        worker.execute_call(
+            run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0
+        )
+
+    assert "Failed to persist failed RunResult" in caplog.text
+
+
+def test_unknown_arm_persists_failed_row_without_retrying(monkeypatch):
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"other-arm": object()})
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    sleep_calls = []
+    monkeypatch.setattr(worker.time, "sleep", lambda s: sleep_calls.append(s))
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    assert sleep_calls == []
+    persist_mock.assert_awaited_once()
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "failed"
+    assert "Could not resolve arm 'fake-arm'" in kwargs["error_message"]
+
+
+def test_malformed_arms_config_persists_failed_row(monkeypatch):
+    def _boom(path):
+        raise ValueError("malformed arms.yaml")
+
+    monkeypatch.setattr(worker, "load_arms", _boom)
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "failed"
+    assert "malformed arms.yaml" in kwargs["error_message"]

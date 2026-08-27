@@ -34,7 +34,7 @@ class RunResult(SQLModel, table=True):
     __tablename__ = "run_result"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    run_id: int = Field(foreign_key="run.id")
+    run_id: int = Field(foreign_key="run.id", index=True)
     example_id: int = Field(foreign_key="eval_example.id")
     arm_name: str
     repeat_index: int

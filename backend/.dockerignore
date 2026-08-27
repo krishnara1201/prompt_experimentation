@@ -1,0 +1,21 @@
+# Secrets — must never be baked into the image
+.env
+.env.*
+!.env.example
+
+# Host-specific virtualenv: absolute host paths inside, and it would clobber
+# the container's own .venv created by the earlier `uv sync` layer.
+.venv
+
+# Python / test caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Not needed at runtime
+tests/
+.git
+.gitignore
