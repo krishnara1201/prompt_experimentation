@@ -10,7 +10,7 @@ dependencies = [
     "sqlmodel>=0.0.39",
     "asyncpg>=0.31.0",
     "alembic>=1.18.5",
-    "fastapi>=0.115",
+    "fastapi[standard]>=0.140.0",
     "celery[redis]>=5.6.3",
 ]
 
