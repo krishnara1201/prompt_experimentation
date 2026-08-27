@@ -46,15 +46,32 @@ Unlike every other arm type, these have no per-call price — `arms.yaml`
 should not set `price_per_1m_input`/`price_per_1m_output` on them, and
 `cost_estimate_usd` on their results is always `null`.
 
+These two arms ship commented out in `arms.yaml`, so `POST /runs` with no
+explicit `arms` filter (which defaults to every arm in the file) won't
+include them. Uncomment them only after the preconditions below are met —
+an authenticated CLI session and a running `subscription_cli` worker —
+otherwise their tasks queue forever with nothing consuming them.
+
 **Precondition**: the machine running the Celery worker must already have
 an authenticated CLI session under your subscription — run `claude login`
 or `codex login` yourself first. Neither adapter reads or stores
 credentials; they only shell out to whatever session already exists.
 
 **Tool use stays on.** Each call still runs from a fresh, empty scratch
-directory (created and torn down per call), so neither CLI can read this
-repo's `CLAUDE.md`/`AGENTS.md` or touch real files, but within that empty
-directory the CLI is free to use tools exactly as it would interactively.
+directory (created and torn down per call), so neither CLI has this repo's
+`CLAUDE.md`/`AGENTS.md` to discover by default, and there's nothing real in
+that directory for a tool call to touch.
+
+This is a context boundary, not a security sandbox, and the two CLIs differ
+here: Codex's `--sandbox workspace-write` is a real OS-level sandbox scoped
+to the scratch directory. Claude Code's `--dangerously-skip-permissions`
+only disables the interactive approval prompt — it installs no OS sandbox,
+so its Bash/Write tools can reach anything the worker process's user
+account can reach, regardless of `cwd`. Only run the Claude Code arm on a
+host where that's an acceptable risk. A user-global `~/.claude/CLAUDE.md`,
+if the operator running the worker has one, also still loads regardless of
+`cwd` — point `CLAUDE_CONFIG_DIR` at a throwaway directory first if you
+need to rule that out too.
 
 **Run a second, low-concurrency worker for these arms** — a CLI subprocess
 call is heavier than an HTTP call, and a subscription session may not

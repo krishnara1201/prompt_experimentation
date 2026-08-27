@@ -23,13 +23,19 @@ arms:
     price_per_1m_input: 1.00
     price_per_1m_output: 5.00
 
-  - name: claude-code-sonnet-subscription
-    adapter: claude_code_cli
-    model: sonnet
-
-  - name: codex-subscription
-    adapter: codex_cli
-    model: gpt-5-codex
+# Subscription-seat CLI arms — opt-in, not enabled by default. Uncomment
+# once you've authenticated the CLI (`claude login` / `codex login`) AND
+# started the dedicated low-concurrency worker for the `subscription_cli`
+# queue (see "Subscription-seat CLI arms" below) — otherwise these arms'
+# tasks queue forever with nothing consuming them.
+#
+#   - name: claude-code-sonnet-subscription
+#     adapter: claude_code_cli
+#     model: sonnet
+#
+#   - name: codex-subscription
+#     adapter: codex_cli
+#     model: gpt-5-codex
 
 judge:
   adapter: anthropic

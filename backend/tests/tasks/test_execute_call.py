@@ -88,6 +88,7 @@ def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
         (RuntimeError("No API key found in environment variable 'OPENAI_API_KEY'"), False),
         (RuntimeError("Claude Code CLI is not authenticated: not logged in"), False),
         (RuntimeError("Codex CLI is not authenticated: please run codex login"), False),
+        (RuntimeError("Claude Code CLI binary 'claude' not found on PATH"), False),
         (_http_status_error(400), False),
         (_http_status_error(401), False),
         (_http_status_error(404), False),

@@ -98,8 +98,8 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
                         queue=queue,
                     )
 
-    # .delay() is a synchronous Redis round-trip and there may be thousands
-    # of them, so it must not run on the event loop.
+    # .apply_async() is a synchronous Redis round-trip and there may be
+    # thousands of them, so it must not run on the event loop.
     try:
         await run_in_threadpool(_enqueue_all)
     except Exception:
