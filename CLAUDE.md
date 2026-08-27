@@ -43,14 +43,20 @@ a local model and hosted API models.
 - **Eval dataset** — a public financial sentiment benchmark (Financial
   PhraseBank or FiQA): labeled, sentence-level, expert-agreement sentiment.
   Avoids building/labeling a gold set from scratch.
-- **Model arms** — two adapter implementations behind a shared `ModelAdapter`
+- **Model arms** — four adapter implementations behind a shared `ModelAdapter`
   protocol, not one per provider: `OpenAICompatibleAdapter` (any provider
   speaking the OpenAI chat-completions schema — Ollama, OpenAI, OpenRouter,
-  Groq, etc.) and `AnthropicAdapter` (Claude's distinct schema). Arms are
-  declared in `backend/arms.yaml`, never hardcoded in code — model-agnostic,
-  bring-your-own-key: adding or swapping a provider is a config edit. Built
-  in Phase 1 (see Build phases below); design doc at
-  `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`.
+  Groq, etc.), `AnthropicAdapter` (Claude's distinct schema), and two
+  subscription-seat CLI adapters with no per-token price —
+  `ClaudeCodeCLIAdapter` and `CodexCLIAdapter`, which drive the `claude`/
+  `codex` CLIs directly under an already-authenticated Pro/Max or Plus/Pro
+  seat instead of calling a metered API. Arms are declared in
+  `backend/arms.yaml`, never hardcoded in code — model-agnostic,
+  bring-your-own-key: adding or swapping a provider is a config edit. The
+  first two were built in Phase 1 (see Build phases below); design doc at
+  `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`. The two
+  subscription-CLI adapters were added afterward; design doc at
+  `docs/superpowers/specs/2026-08-27-subscription-cli-adapters-design.md`.
   - Local: Ollama serving **Qwen3-8B** by default (confirmed: <16GB VRAM GPU).
   - API: model-agnostic via config — `arms.yaml` currently has example arms
     for GPT-4o-mini and Claude Haiku, but any OpenAI-schema or Anthropic
@@ -99,9 +105,14 @@ a local model and hosted API models.
    behind one interface (`backend/app/adapters/`), config-driven via
    `backend/arms.yaml` (`backend/app/config/arms.py`). Demo script
    (`backend/app/demo.py`) runs a handful of prompts through every configured
-   arm end to end. 27 tests passing, including a real (non-mocked) Ollama
-   e2e test. Spec: `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`;
-   plan: `docs/superpowers/plans/2026-08-25-model-adapter-layer.md`.
+   arm end to end. Spec: `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`;
+   plan: `docs/superpowers/plans/2026-08-25-model-adapter-layer.md`. Extended
+   afterward with two subscription-seat CLI adapters (`ClaudeCodeCLIAdapter`,
+   `CodexCLIAdapter`) so Claude Code/Codex CLI arms can run under a
+   subscription instead of a metered API key, routed to a dedicated
+   low-concurrency Celery queue. Spec:
+   `docs/superpowers/specs/2026-08-27-subscription-cli-adapters-design.md`;
+   plan: `docs/superpowers/plans/2026-08-27-subscription-cli-adapters.md`.
 2. **Orchestration** ✅ **Done.** Celery/Redis run eval set × arms × repeats;
    raw outputs persisted to Postgres. FastAPI run endpoints (create, status,
    results); idempotent seed script for eval examples.
