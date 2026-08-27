@@ -38,6 +38,36 @@ works for Ollama and any provider using the OpenAI chat-completions schema
 (OpenAI, OpenRouter, Groq, Together, etc.); `adapter: anthropic` is for
 Claude models.
 
+## Subscription-seat CLI arms (Claude Code, Codex)
+
+`adapter: claude_code_cli` and `adapter: codex_cli` drive the `claude` and
+`codex` CLIs directly, non-interactively, instead of calling a metered API.
+Unlike every other arm type, these have no per-call price — `arms.yaml`
+should not set `price_per_1m_input`/`price_per_1m_output` on them, and
+`cost_estimate_usd` on their results is always `null`.
+
+**Precondition**: the machine running the Celery worker must already have
+an authenticated CLI session under your subscription — run `claude login`
+or `codex login` yourself first. Neither adapter reads or stores
+credentials; they only shell out to whatever session already exists.
+
+**Tool use stays on.** Each call still runs from a fresh, empty scratch
+directory (created and torn down per call), so neither CLI can read this
+repo's `CLAUDE.md`/`AGENTS.md` or touch real files, but within that empty
+directory the CLI is free to use tools exactly as it would interactively.
+
+**Run a second, low-concurrency worker for these arms** — a CLI subprocess
+call is heavier than an HTTP call, and a subscription session may not
+tolerate the same parallelism as the API arms:
+
+```bash
+uv run celery -A app.tasks.worker.celery_app worker -Q subscription_cli --concurrency=1 --loglevel=info
+```
+
+Keep your existing worker command (`-Q celery`, or no `-Q` flag, which
+defaults to the same queue) running alongside it — one worker per queue,
+both pointed at the same Redis broker.
+
 ## Phase 2: Orchestration
 
 Runs (eval set) × (arms) × (N repeats) as async Celery jobs and persists
