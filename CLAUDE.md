@@ -124,8 +124,16 @@ a local model and hosted API models.
    Spearman correlation and Cohen's kappa between judge and human scores
    before judge scores are trusted on a full run. Spec:
    `docs/superpowers/specs/2026-08-27-judge-layer-calibration-design.md`.
-4. **Stats layer** — paired bootstrap/Wilcoxon per arm pair; Bayesian
-   posterior comparison; sample-size calculator.
+4. **Stats layer** ✅ **Done.** `backend/app/stats/` — hierarchical paired
+   bootstrap + Wilcoxon signed-rank + Holm-Bonferroni correction
+   (`paired_tests.py`), PyMC-based Bayesian equivalence test
+   (`bayesian.py`, restricted to `judge_score` — direction-sensitive for
+   the other metrics), closed-form sample-size/power calculator
+   (`power.py`), and `RunResult` aggregation (`aggregation.py`). Exposed
+   via `GET /runs/{run_id}/compare|equivalence|power`
+   (`backend/app/api/routes/stats.py`). Spec:
+   `docs/superpowers/specs/2026-08-27-stats-layer-design.md`; plan:
+   `docs/superpowers/plans/2026-08-27-stats-layer.md`.
 5. **Dashboard** — win-rate table with CIs, cost/latency/quality frontier,
    judge calibration report.
 6. **Agent-facing judge tool** — expose the judge layer (Phase 3) as a
@@ -145,12 +153,12 @@ a local model and hosted API models.
   as fixed arms.
 - Confirm final task dataset (Financial PhraseBank vs. FiQA) once
   licensing/format is checked.
-- Confirm Bayesian library/approach to match — or deliberately diverge
-  from — `experimentation_copilot`'s existing implementation. Note:
-  `experimentation_copilot/backend/app/stats/stat_analysis.py` is currently
-  purely frequentist (p-values, CI, SRM, Welch-Satterthwaite) — there is no
-  existing Bayesian code there to reuse, so this needs a fresh pick, not a
-  copy, when Phase 4 (stats layer) starts.
+- ~~Confirm Bayesian library/approach~~ **Resolved:** PyMC (Phase 4, done).
+  `experimentation_copilot/backend/app/stats/stat_analysis.py` was purely
+  frequentist with no existing Bayesian code to reuse, so this was a fresh
+  pick rather than a copy — a PyMC paired-difference model
+  (`backend/app/stats/bayesian.py`), deliberately diverging from
+  `experimentation_copilot`.
 
 ## Non-goals
 
