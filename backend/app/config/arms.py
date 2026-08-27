@@ -2,6 +2,8 @@ import yaml
 
 from app.adapters.anthropic import AnthropicAdapter
 from app.adapters.base import ModelAdapter
+from app.adapters.claude_code_cli import ClaudeCodeCLIAdapter
+from app.adapters.codex_cli import CodexCLIAdapter
 from app.adapters.openai_compatible import OpenAICompatibleAdapter
 
 
@@ -20,6 +22,8 @@ class InvalidJudgeConfigError(ValueError):
 ADAPTER_TYPES = {
     "openai_compatible": OpenAICompatibleAdapter,
     "anthropic": AnthropicAdapter,
+    "claude_code_cli": ClaudeCodeCLIAdapter,
+    "codex_cli": CodexCLIAdapter,
 }
 
 

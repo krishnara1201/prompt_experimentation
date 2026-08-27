@@ -86,6 +86,9 @@ def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
     "exc, retryable",
     [
         (RuntimeError("No API key found in environment variable 'OPENAI_API_KEY'"), False),
+        (RuntimeError("Claude Code CLI is not authenticated: not logged in"), False),
+        (RuntimeError("Codex CLI is not authenticated: please run codex login"), False),
+        (RuntimeError("Claude Code CLI binary 'claude' not found on PATH"), False),
         (_http_status_error(400), False),
         (_http_status_error(401), False),
         (_http_status_error(404), False),
@@ -118,6 +121,24 @@ def test_does_not_retry_missing_api_key(monkeypatch):
     _, kwargs = persist_mock.call_args
     assert kwargs["status"] == "failed"
     assert "No API key" in kwargs["error_message"]
+
+
+def test_does_not_retry_unauthenticated_subscription_cli(monkeypatch):
+    exc = RuntimeError("Claude Code CLI is not authenticated: not logged in")
+    adapter = FakeAdapter([exc] * 4)
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    sleep_calls = []
+    monkeypatch.setattr(worker.time, "sleep", lambda s: sleep_calls.append(s))
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    assert adapter.calls == 1  # no retries, no backoff sleep
+    assert sleep_calls == []
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "failed"
+    assert "is not authenticated" in kwargs["error_message"]
 
 
 def test_does_not_retry_4xx(monkeypatch):

@@ -119,7 +119,11 @@ def is_retryable(exc: Exception) -> bool:
     a 4xx response raises httpx.HTTPStatusError via raise_for_status(). Both
     are permanent — retrying only burns backoff sleep. 429 is the exception:
     rate limiting is transient, so it stays retryable, as do network errors,
-    timeouts and 5xx.
+    timeouts and 5xx. An unauthenticated subscription CLI
+    (`app/adapters/claude_code_cli.py`, `app/adapters/codex_cli.py`) is the
+    same kind of permanent failure as a missing API key, and so is a missing
+    CLI binary (raised as RuntimeError with "not found on PATH" from the
+    same two adapters) — no retry will make the binary appear on PATH.
     """
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
@@ -127,6 +131,10 @@ def is_retryable(exc: Exception) -> bool:
             return True
         return not (400 <= status < 500)
     if isinstance(exc, RuntimeError) and "No API key found in environment variable" in str(exc):
+        return False
+    if isinstance(exc, RuntimeError) and "is not authenticated" in str(exc):
+        return False
+    if isinstance(exc, RuntimeError) and "not found on PATH" in str(exc):
         return False
     if isinstance(exc, JudgeParseError):
         return False

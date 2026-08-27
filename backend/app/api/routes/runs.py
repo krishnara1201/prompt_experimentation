@@ -85,17 +85,21 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
     def _enqueue_all() -> None:
         for example_id, example_text in chosen:
             for arm_name in arm_names:
+                queue = getattr(available_arms[arm_name], "celery_queue", "celery")
                 for repeat_index in range(payload.repeats):
-                    run_single_call.delay(
-                        run_id=run_id,
-                        example_id=example_id,
-                        example_text=example_text,
-                        arm_name=arm_name,
-                        repeat_index=repeat_index,
+                    run_single_call.apply_async(
+                        kwargs={
+                            "run_id": run_id,
+                            "example_id": example_id,
+                            "example_text": example_text,
+                            "arm_name": arm_name,
+                            "repeat_index": repeat_index,
+                        },
+                        queue=queue,
                     )
 
-    # .delay() is a synchronous Redis round-trip and there may be thousands
-    # of them, so it must not run on the event loop.
+    # .apply_async() is a synchronous Redis round-trip and there may be
+    # thousands of them, so it must not run on the event loop.
     try:
         await run_in_threadpool(_enqueue_all)
     except Exception:

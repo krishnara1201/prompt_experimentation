@@ -19,6 +19,13 @@ pytestmark = pytest.mark.skipif(
 FAKE_ARMS = {"fake-arm": object()}
 
 
+class _FakeSubscriptionAdapter:
+    celery_queue = "subscription_cli"
+
+
+FAKE_ARMS_MIXED = {"fake-arm": object(), "fake-subscription-arm": _FakeSubscriptionAdapter()}
+
+
 async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
     """Make the TestClient-driven app use the NullPool test engine.
 
@@ -131,7 +138,7 @@ def test_create_run_enqueues_expected_number_of_calls(mock_load_arms, mock_task)
         run_id = body["run_id"]
         assert body["status"] == "pending"
         assert body["total_calls"] == 2  # 1 example x 1 arm x 2 repeats
-        assert mock_task.delay.call_count == 2
+        assert mock_task.apply_async.call_count == 2
     finally:
         if run_id is not None:
             _delete_run(run_id)
@@ -155,9 +162,30 @@ def test_create_run_rejects_empty_arms_list(mock_load_arms, mock_task):
 
 
 @patch("app.api.routes.runs.run_single_call")
+@patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS_MIXED)
+def test_create_run_routes_arms_to_correct_queue(mock_load_arms, mock_task):
+    example_id = _insert_example()
+    run_id = None
+    try:
+        response = TestClient(app).post(
+            "/runs",
+            json={"arms": ["fake-arm", "fake-subscription-arm"], "repeats": 1, "sample_size": 1, "seed": 1},
+        )
+        assert response.status_code == 200
+        run_id = response.json()["run_id"]
+
+        queues_used = {call.kwargs["queue"] for call in mock_task.apply_async.call_args_list}
+        assert queues_used == {"celery", "subscription_cli"}
+    finally:
+        if run_id is not None:
+            _delete_run(run_id)
+        _delete_example(example_id)
+
+
+@patch("app.api.routes.runs.run_single_call")
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
 def test_create_run_deletes_run_row_when_enqueue_fails(mock_load_arms, mock_task):
-    mock_task.delay.side_effect = RuntimeError("redis is down")
+    mock_task.apply_async.side_effect = RuntimeError("redis is down")
     example_id = _insert_example()
     run_id_before = _latest_run_id()
     try:
