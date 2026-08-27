@@ -102,15 +102,22 @@ a local model and hosted API models.
    arm end to end. 27 tests passing, including a real (non-mocked) Ollama
    e2e test. Spec: `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`;
    plan: `docs/superpowers/plans/2026-08-25-model-adapter-layer.md`.
-2. **Orchestration** — wire Celery/Redis to run eval set × arms × repeats;
-   persist raw outputs to Postgres.
+2. **Orchestration** ✅ **Done.** Celery/Redis run eval set × arms × repeats;
+   raw outputs persisted to Postgres. FastAPI run endpoints (create, status,
+   results); idempotent seed script for eval examples.
 3. **Judge layer + calibration** — implement rubric-based LLM-as-judge; score
    the gold subset; report agreement with human labels before proceeding.
+   Spec: `docs/superpowers/specs/2026-08-27-judge-layer-calibration-design.md`.
 4. **Stats layer** — paired bootstrap/Wilcoxon per arm pair; Bayesian
    posterior comparison; sample-size calculator.
 5. **Dashboard** — win-rate table with CIs, cost/latency/quality frontier,
    judge calibration report.
-6. **Stretch** — LoRA fine-tune the local model on a subset of the task;
+6. **Agent-facing judge tool** — expose the judge layer (Phase 3) as a
+   callable tool so local coding agents (e.g. Claude Code sessions) can use
+   this platform's calibrated rubric judge directly, independent of the
+   eval-run pipeline. Deliberately designed after Phase 3 lands, against its
+   actual interface rather than a guess at one.
+7. **Stretch** — LoRA fine-tune the local model on a subset of the task;
    compare fine-tuned local vs. base local vs. API arms.
 
 ## Open decisions
