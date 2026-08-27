@@ -37,6 +37,17 @@ def test_raises_on_multi_digit_score():
         parse_judge_response("SCORE: 10\nRATIONALE: looks like ten")
 
 
+def test_ignores_score_mentioned_in_a_reasoning_trace():
+    text = "I think SCORE: 2 is right.\nSCORE: 5\nRATIONALE: ok"
+    result = parse_judge_response(text)
+    assert result.score == 5
+
+
+def test_rejects_fractional_score():
+    with pytest.raises(JudgeParseError):
+        parse_judge_response("SCORE: 4.5\nRATIONALE: not a valid single digit")
+
+
 class _FakeAdapter:
     def __init__(self, text):
         self._text = text

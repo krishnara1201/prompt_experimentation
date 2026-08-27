@@ -107,11 +107,12 @@ a local model and hosted API models.
    results); idempotent seed script for eval examples.
 3. **Judge layer + calibration** ✅ **Done.** Rubric-based LLM-as-judge
    (`backend/app/judge/`) auto-scores every completed `RunResult` via a
-   chained Celery task. Calibration workflow (`backend/scripts/select_
-   calibration_sample.py`, `import_calibration_labels.py`,
-   `calibration_report.py`) reports Spearman correlation and Cohen's kappa
-   between judge and human scores before judge scores are trusted on a
-   full run. Spec: `docs/superpowers/specs/2026-08-27-judge-layer-calibration-design.md`.
+   chained Celery task. Calibration workflow
+   (`backend/scripts/select_calibration_sample.py`,
+   `import_calibration_labels.py`, `calibration_report.py`) reports
+   Spearman correlation and Cohen's kappa between judge and human scores
+   before judge scores are trusted on a full run. Spec:
+   `docs/superpowers/specs/2026-08-27-judge-layer-calibration-design.md`.
 4. **Stats layer** — paired bootstrap/Wilcoxon per arm pair; Bayesian
    posterior comparison; sample-size calculator.
 5. **Dashboard** — win-rate table with CIs, cost/latency/quality frontier,

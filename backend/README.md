@@ -148,6 +148,20 @@ uv run python -m scripts.calibration_report --run-id 1
 Prints Spearman correlation and Cohen's kappa (score >= 4 treated as
 "correct") between judge and human scores, plus mean absolute difference.
 
+### Known limitations
+
+- **Judge cost is not tracked.** The judge call is itself a billed API
+  call, but its cost/latency/token counts are currently discarded — only
+  the parsed `SCORE`/`RATIONALE` are persisted. Judging a run roughly
+  doubles its API spend. A future phase should add judge-side
+  cost/latency columns if the cost/latency/quality frontier needs to
+  account for it.
+- **Watch for judge/arm model overlap.** `arms.yaml`'s default `judge:`
+  entry uses the same underlying model as the `claude-haiku` example eval
+  arm. LLM-as-judge self-preference is a known validity risk — consider
+  configuring a different (ideally stronger) model as the judge than any
+  arm under comparison.
+
 ## Tests
 
 ```bash

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from app.adapters.base import ModelAdapter
 from app.judge.rubric import render_prompt
 
-SCORE_PATTERN = re.compile(r"SCORE:\s*([1-5])\b", re.IGNORECASE)
+SCORE_PATTERN = re.compile(r"^\s*SCORE:\s*([1-5])\s*$", re.IGNORECASE | re.MULTILINE)
 RATIONALE_PATTERN = re.compile(r"RATIONALE:\s*(.+)", re.IGNORECASE | re.DOTALL)
 
 
