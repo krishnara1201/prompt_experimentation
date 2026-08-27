@@ -3,6 +3,7 @@ from itertools import combinations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.db.models import Run
 from app.db.session import get_session
@@ -35,6 +36,7 @@ class EquivalenceResponse(BaseModel):
     metric: str
     epsilon: float
     n_examples: int
+    n_excluded: int
     posterior_mean: float
     ci_lower: float
     ci_upper: float
@@ -53,6 +55,7 @@ class PowerResponse(BaseModel):
     target_power: float
     required_n: int
     achieved_power: float
+    n_excluded: int
 
 
 async def _load_run_or_404(run_id: int, session: AsyncSession) -> Run:
@@ -90,7 +93,7 @@ async def compare_arms(
     metric: str,
     arm_a: str | None = None,
     arm_b: str | None = None,
-    bootstrap_samples: int = Query(default=10_000, gt=0),
+    bootstrap_samples: int = Query(default=10_000, gt=0, le=200_000),
     session: AsyncSession = Depends(get_session),
 ):
     _validate_metric(metric)
@@ -99,10 +102,14 @@ async def compare_arms(
 
     repeats_by_cell = await load_metric_by_example(session, run_id, metric, run.arm_names)
 
+    def _run_compare_pair(a: str, b: str):
+        return compare_pair(repeats_by_cell, a, b, metric, bootstrap_samples=bootstrap_samples)
+
     try:
-        results = [
-            compare_pair(repeats_by_cell, a, b, metric, bootstrap_samples=bootstrap_samples) for a, b in pairs
-        ]
+        # compare_pair runs a pure-Python bootstrap loop that can take
+        # seconds at high bootstrap_samples -- it must not run on the event
+        # loop, same rationale as run_in_threadpool usage in runs.py.
+        results = [await run_in_threadpool(_run_compare_pair, a, b) for a, b in pairs]
     except InsufficientDataError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -120,14 +127,22 @@ async def equivalence(
     session: AsyncSession = Depends(get_session),
 ):
     _validate_metric(metric)
+    if metric != "judge_score":
+        raise HTTPException(
+            status_code=422,
+            detail="equivalence is only supported for metric='judge_score' (direction-sensitive for other metrics)",
+        )
     run = await _load_run_or_404(run_id, session)
     _validate_arms(run, arm_local, arm_api)
 
     repeats_by_cell = await load_metric_by_example(session, run_id, metric, [arm_local, arm_api])
-    diffs, _n_excluded = paired_diffs(repeats_by_cell, arm_local, arm_api)
+    diffs, n_excluded = paired_diffs(repeats_by_cell, arm_local, arm_api)
 
     try:
-        result = equivalence_probability(diffs, epsilon)
+        # equivalence_probability runs PyMC MCMC sampling (~5+ seconds even
+        # at reduced draws) -- it must not run on the event loop, same
+        # rationale as run_in_threadpool usage in runs.py.
+        result = await run_in_threadpool(equivalence_probability, diffs, epsilon)
     except InsufficientDataError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -137,6 +152,7 @@ async def equivalence(
         metric=metric,
         epsilon=epsilon,
         n_examples=len(diffs),
+        n_excluded=n_excluded,
         posterior_mean=result.posterior_mean,
         ci_lower=result.ci_lower,
         ci_upper=result.ci_upper,
@@ -160,11 +176,15 @@ async def power_estimate(
     _validate_arms(run, arm_a, arm_b)
 
     repeats_by_cell = await load_metric_by_example(session, run_id, metric, [arm_a, arm_b])
-    diffs, _n_excluded = paired_diffs(repeats_by_cell, arm_a, arm_b)
+    diffs, n_excluded = paired_diffs(repeats_by_cell, arm_a, arm_b)
 
     try:
         result = estimate_sample_size(diffs, effect_size=effect_size, power=power, alpha=alpha)
-    except InsufficientDataError as exc:
+    except ValueError as exc:
+        # Covers both InsufficientDataError (too few pilot examples) and the
+        # plain ValueError estimate_sample_size raises for a zero effect
+        # size -- InsufficientDataError is a ValueError subclass, so this
+        # single except handles both without redundancy.
         raise HTTPException(status_code=422, detail=str(exc))
 
     return PowerResponse(
@@ -179,4 +199,5 @@ async def power_estimate(
         target_power=result.target_power,
         required_n=result.required_n,
         achieved_power=result.achieved_power,
+        n_excluded=n_excluded,
     )

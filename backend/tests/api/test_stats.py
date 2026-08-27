@@ -53,7 +53,14 @@ def _insert_run(arm_names: list[str]) -> int:
     return asyncio.run(_run())
 
 
-def _insert_result(run_id: int, example_id: int, arm_name: str, latency_ms: float) -> None:
+def _insert_result(
+    run_id: int,
+    example_id: int,
+    arm_name: str,
+    latency_ms: float | None = None,
+    judge_score: float | None = None,
+    judge_status: str = "completed",
+) -> None:
     async def _run():
         async with AsyncSession(db_test_engine) as session:
             session.add(
@@ -63,7 +70,8 @@ def _insert_result(run_id: int, example_id: int, arm_name: str, latency_ms: floa
                     arm_name=arm_name,
                     repeat_index=0,
                     status="completed",
-                    judge_status="completed",
+                    judge_status=judge_status,
+                    judge_score=judge_score,
                     latency_ms=latency_ms,
                     output_text="x",
                 )
@@ -95,6 +103,15 @@ def _seed_two_arm_run(n_examples: int = 6, offset: float = 2.0) -> tuple[int, li
     for i, example_id in enumerate(example_ids):
         _insert_result(run_id, example_id, "arm-a", latency_ms=float(i) + offset)
         _insert_result(run_id, example_id, "arm-b", latency_ms=float(i))
+    return run_id, example_ids
+
+
+def _seed_two_arm_run_judge_score(n_examples: int = 10, offset: float = 0.5) -> tuple[int, list[int]]:
+    example_ids = _insert_examples(n_examples)
+    run_id = _insert_run(["arm-a", "arm-b"])
+    for i, example_id in enumerate(example_ids):
+        _insert_result(run_id, example_id, "arm-a", judge_score=float(i) + offset)
+        _insert_result(run_id, example_id, "arm-b", judge_score=float(i))
     return run_id, example_ids
 
 
@@ -167,17 +184,54 @@ def test_compare_arms_422_when_insufficient_paired_examples():
 
 
 def test_equivalence_returns_probability_between_zero_and_one():
-    run_id, example_ids = _seed_two_arm_run(n_examples=10, offset=0.1)
+    run_id, example_ids = _seed_two_arm_run_judge_score(n_examples=10, offset=0.1)
     try:
         response = TestClient(app).get(
-            f"/runs/{run_id}/equivalence?metric=latency_ms&arm_local=arm-a&arm_api=arm-b&epsilon=1.0"
+            f"/runs/{run_id}/equivalence?metric=judge_score&arm_local=arm-a&arm_api=arm-b&epsilon=1.0"
         )
         assert response.status_code == 200
         body = response.json()
         assert 0.0 <= body["p_equivalent"] <= 1.0
         assert body["ci_lower"] <= body["posterior_mean"] <= body["ci_upper"]
+        # Fix 5: n_excluded must be reported, not silently dropped.
+        assert body["n_excluded"] == 0
     finally:
         _cleanup(run_id, example_ids)
+
+
+def test_equivalence_422_for_non_judge_score_metric():
+    # Fix 4: equivalence's p_equivalent = P(mu >= -epsilon) is directionally
+    # correct only for judge_score (higher-is-better); the other allowed
+    # metrics are lower-is-better, so the endpoint now rejects them outright
+    # rather than silently reporting the inverted question.
+    run_id, example_ids = _seed_two_arm_run(n_examples=10, offset=0.1)
+    try:
+        response = TestClient(app).get(
+            f"/runs/{run_id}/equivalence?metric=latency_ms&arm_local=arm-a&arm_api=arm-b&epsilon=1.0"
+        )
+        assert response.status_code == 422
+        assert "judge_score" in response.json()["detail"]
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_equivalence_reports_n_excluded_for_asymmetric_arm_coverage():
+    # Fix 5: n_excluded must be reported, not silently dropped. Seed 10
+    # paired examples plus one extra example scored only for arm-a, so it's
+    # excluded from the paired diffs.
+    run_id, example_ids = _seed_two_arm_run_judge_score(n_examples=10, offset=0.1)
+    extra_example_id = _insert_examples(1)[0]
+    _insert_result(run_id, extra_example_id, "arm-a", judge_score=5.0)
+    try:
+        response = TestClient(app).get(
+            f"/runs/{run_id}/equivalence?metric=judge_score&arm_local=arm-a&arm_api=arm-b&epsilon=1.0"
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["n_excluded"] == 1
+        assert body["n_examples"] == 10
+    finally:
+        _cleanup(run_id, example_ids + [extra_example_id])
 
 
 def test_power_returns_required_n_and_achieved_power():
@@ -188,5 +242,37 @@ def test_power_returns_required_n_and_achieved_power():
         body = response.json()
         assert body["required_n"] > 0
         assert 0.0 <= body["achieved_power"] <= 1.0
+        # Fix 5: n_excluded must be reported, not silently dropped.
+        assert body["n_excluded"] == 0
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_power_returns_422_for_zero_effect_size():
+    # Fix 1: estimate_sample_size raises a plain ValueError (not the
+    # InsufficientDataError subclass) when the effective effect size is
+    # zero -- reachable via effect_size=0 in the query string. The handler
+    # must map this to a 422, not let it escape as an unhandled 500.
+    run_id, example_ids = _seed_two_arm_run(n_examples=10, offset=2.0)
+    try:
+        response = TestClient(app).get(
+            f"/runs/{run_id}/power?metric=latency_ms&arm_a=arm-a&arm_b=arm-b&effect_size=0"
+        )
+        assert response.status_code == 422
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_compare_arms_422_for_bootstrap_samples_over_cap():
+    # Fix 3: bootstrap_samples has no upper bound, so a client could request
+    # an arbitrarily large bootstrap and tie up a worker thread for hours.
+    # FastAPI's own Query(le=200_000) validation should reject this before
+    # the handler runs.
+    run_id, example_ids = _seed_two_arm_run()
+    try:
+        response = TestClient(app).get(
+            f"/runs/{run_id}/compare?metric=latency_ms&arm_a=arm-a&arm_b=arm-b&bootstrap_samples=200001"
+        )
+        assert response.status_code == 422
     finally:
         _cleanup(run_id, example_ids)
