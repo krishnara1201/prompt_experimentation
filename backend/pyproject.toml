@@ -13,6 +13,7 @@ dependencies = [
     "fastapi[standard]>=0.140.0",
     "celery[redis]>=5.6.3",
     "scipy>=1.18.1",
+    "pymc>=6.3.1",
 ]
 
 [dependency-groups]
