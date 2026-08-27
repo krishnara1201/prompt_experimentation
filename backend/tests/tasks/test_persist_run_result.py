@@ -77,7 +77,7 @@ def test_persists_success_response_field_by_field(run_and_example):
         finish_reason="stop",
     )
 
-    asyncio.run(
+    result_id = asyncio.run(
         _persist_run_result(
             run_id=run_id,
             example_id=example_id,
@@ -92,6 +92,7 @@ def test_persists_success_response_field_by_field(run_and_example):
     rows = _fetch_rows(run_id)
     assert len(rows) == 1
     row = rows[0]
+    assert result_id == row.id
     assert row.run_id == run_id
     assert row.example_id == example_id
     assert row.arm_name == "fake-arm"

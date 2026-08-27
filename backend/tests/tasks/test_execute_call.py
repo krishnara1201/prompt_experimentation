@@ -1,9 +1,10 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
 from app.adapters.base import ModelResponse
+from app.judge.scorer import JudgeParseError
 from app.tasks import worker
 
 SUCCESS = ModelResponse(text="positive", latency_ms=10.0, prompt_tokens=5, completion_tokens=1, cost_estimate_usd=0.0001)
@@ -27,6 +28,7 @@ def test_succeeds_on_first_try(monkeypatch):
     monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    monkeypatch.setattr(worker, "run_judge_call", MagicMock())
     sleep_calls = []
     monkeypatch.setattr(worker.time, "sleep", lambda s: sleep_calls.append(s))
 
@@ -45,6 +47,7 @@ def test_retries_then_succeeds(monkeypatch):
     monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    monkeypatch.setattr(worker, "run_judge_call", MagicMock())
     sleep_calls = []
     monkeypatch.setattr(worker.time, "sleep", lambda s: sleep_calls.append(s))
 
@@ -92,6 +95,7 @@ def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
         (httpx.ConnectError("network down"), True),
         (httpx.ReadTimeout("slow"), True),
         (RuntimeError("transient blip"), True),
+        (JudgeParseError("bad format"), False),
     ],
 )
 def test_is_retryable_classification(exc, retryable):
@@ -137,6 +141,7 @@ def test_still_retries_429(monkeypatch):
     monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    monkeypatch.setattr(worker, "run_judge_call", MagicMock())
     monkeypatch.setattr(worker.time, "sleep", lambda s: None)
 
     worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
@@ -144,6 +149,33 @@ def test_still_retries_429(monkeypatch):
     assert adapter.calls == 3
     _, kwargs = persist_mock.call_args
     assert kwargs["status"] == "completed"
+
+
+def test_enqueues_judge_call_after_successful_persist(monkeypatch):
+    adapter = FakeAdapter([SUCCESS])
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    persist_mock = AsyncMock(return_value=42)
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    judge_task_mock = MagicMock()
+    monkeypatch.setattr(worker, "run_judge_call", judge_task_mock)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    judge_task_mock.delay.assert_called_once_with(run_result_id=42)
+
+
+def test_does_not_enqueue_judge_call_on_failure(monkeypatch):
+    adapter = FakeAdapter([RuntimeError("boom")] * 4)
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    monkeypatch.setattr(worker, "_persist_run_result", AsyncMock())
+    judge_task_mock = MagicMock()
+    monkeypatch.setattr(worker, "run_judge_call", judge_task_mock)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0, max_retries=3)
+
+    judge_task_mock.delay.assert_not_called()
 
 
 def test_db_failure_after_success_does_not_retry_the_model_call(monkeypatch):
