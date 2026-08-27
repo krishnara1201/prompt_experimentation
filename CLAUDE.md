@@ -105,9 +105,13 @@ a local model and hosted API models.
 2. **Orchestration** ✅ **Done.** Celery/Redis run eval set × arms × repeats;
    raw outputs persisted to Postgres. FastAPI run endpoints (create, status,
    results); idempotent seed script for eval examples.
-3. **Judge layer + calibration** — implement rubric-based LLM-as-judge; score
-   the gold subset; report agreement with human labels before proceeding.
-   Spec: `docs/superpowers/specs/2026-08-27-judge-layer-calibration-design.md`.
+3. **Judge layer + calibration** ✅ **Done.** Rubric-based LLM-as-judge
+   (`backend/app/judge/`) auto-scores every completed `RunResult` via a
+   chained Celery task. Calibration workflow (`backend/scripts/select_
+   calibration_sample.py`, `import_calibration_labels.py`,
+   `calibration_report.py`) reports Spearman correlation and Cohen's kappa
+   between judge and human scores before judge scores are trusted on a
+   full run. Spec: `docs/superpowers/specs/2026-08-27-judge-layer-calibration-design.md`.
 4. **Stats layer** — paired bootstrap/Wilcoxon per arm pair; Bayesian
    posterior comparison; sample-size calculator.
 5. **Dashboard** — win-rate table with CIs, cost/latency/quality frontier,

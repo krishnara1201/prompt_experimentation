@@ -109,6 +109,45 @@ curl localhost:8000/runs/1
 curl 'localhost:8000/runs/1/results?limit=50'
 ```
 
+## Phase 3: Judge layer + calibration
+
+Every successfully completed `RunResult` is automatically scored 1-5 by a
+rubric-based LLM judge (configured via the separate `judge:` key in
+`arms.yaml`, never as an eval arm). Judge scores land on `judge_score` /
+`judge_rationale`; `judge_status` tracks `pending` / `completed` / `failed`
+independently of the generation call's own `status`.
+
+**Before trusting `judge_score` on a full run**, run the calibration
+workflow — CLAUDE.md's differentiator is that judge calibration is
+reported, not assumed:
+
+### 1. Select a stratified sample to hand-label
+
+```bash
+uv run python -m scripts.select_calibration_sample --run-id 1 --n 40 --out calibration_sample.json
+```
+
+Stratifies by `(arm_name, gold_label)` so every arm and sentiment class is
+represented. Open the file and fill in each row's `human_score` (1-5) by
+hand.
+
+### 2. Import your labels
+
+```bash
+uv run python -m scripts.import_calibration_labels --in calibration_sample.json --labeled-by you@example.com
+```
+
+Idempotent — re-running with updated scores upserts rather than duplicates.
+
+### 3. Read the calibration report
+
+```bash
+uv run python -m scripts.calibration_report --run-id 1
+```
+
+Prints Spearman correlation and Cohen's kappa (score >= 4 treated as
+"correct") between judge and human scores, plus mean absolute difference.
+
 ## Tests
 
 ```bash
