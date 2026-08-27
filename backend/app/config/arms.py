@@ -13,6 +13,10 @@ class InvalidArmConfigError(ValueError):
     pass
 
 
+class InvalidJudgeConfigError(ValueError):
+    pass
+
+
 ADAPTER_TYPES = {
     "openai_compatible": OpenAICompatibleAdapter,
     "anthropic": AnthropicAdapter,
@@ -55,3 +59,27 @@ def load_arms(config_path: str) -> dict[str, ModelAdapter]:
             ) from exc
 
     return arms
+
+
+def load_judge_arm(config_path: str) -> ModelAdapter:
+    with open(config_path) as f:
+        raw = yaml.safe_load(f)
+
+    if not isinstance(raw, dict) or not isinstance(raw.get("judge"), dict):
+        raise InvalidJudgeConfigError(f"'{config_path}' must have a top-level 'judge' mapping")
+
+    entry = dict(raw["judge"])
+    if "adapter" not in entry:
+        raise InvalidJudgeConfigError("'judge' entry is missing required key 'adapter'")
+
+    adapter_type = entry.pop("adapter")
+    adapter_cls = ADAPTER_TYPES.get(adapter_type)
+    if adapter_cls is None:
+        raise UnknownAdapterError(f"Unknown adapter type '{adapter_type}' for judge")
+
+    try:
+        return adapter_cls(**entry)
+    except TypeError as exc:
+        raise InvalidJudgeConfigError(
+            f"judge config has invalid fields for adapter '{adapter_type}': {exc}"
+        ) from exc

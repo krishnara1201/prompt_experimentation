@@ -2,7 +2,13 @@ import pytest
 
 from app.adapters.anthropic import AnthropicAdapter
 from app.adapters.openai_compatible import OpenAICompatibleAdapter
-from app.config.arms import InvalidArmConfigError, UnknownAdapterError, load_arms
+from app.config.arms import (
+    InvalidArmConfigError,
+    InvalidJudgeConfigError,
+    UnknownAdapterError,
+    load_arms,
+    load_judge_arm,
+)
 
 VALID_CONFIG = """
 arms:
@@ -128,3 +134,65 @@ def test_load_arms_raises_on_unexpected_field_for_adapter(tmp_path):
 
     with pytest.raises(InvalidArmConfigError):
         load_arms(str(config_path))
+
+
+VALID_JUDGE_CONFIG = (
+    VALID_CONFIG
+    + """
+judge:
+  adapter: anthropic
+  model: claude-haiku-4-5-20251001
+  api_key_env: ANTHROPIC_API_KEY
+"""
+)
+
+MISSING_JUDGE_ADAPTER_CONFIG = (
+    VALID_CONFIG
+    + """
+judge:
+  model: claude-haiku-4-5-20251001
+"""
+)
+
+UNKNOWN_JUDGE_ADAPTER_CONFIG = (
+    VALID_CONFIG
+    + """
+judge:
+  adapter: telepathy
+  model: mind-reader-v1
+"""
+)
+
+
+def test_load_judge_arm_builds_correct_adapter(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(VALID_JUDGE_CONFIG)
+
+    judge = load_judge_arm(str(config_path))
+
+    assert isinstance(judge, AnthropicAdapter)
+    assert judge.model == "claude-haiku-4-5-20251001"
+
+
+def test_load_judge_arm_raises_when_judge_key_missing(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(VALID_CONFIG)  # no judge: key at all
+
+    with pytest.raises(InvalidJudgeConfigError):
+        load_judge_arm(str(config_path))
+
+
+def test_load_judge_arm_raises_when_adapter_missing(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(MISSING_JUDGE_ADAPTER_CONFIG)
+
+    with pytest.raises(InvalidJudgeConfigError):
+        load_judge_arm(str(config_path))
+
+
+def test_load_judge_arm_raises_on_unknown_adapter_type(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(UNKNOWN_JUDGE_ADAPTER_CONFIG)
+
+    with pytest.raises(UnknownAdapterError):
+        load_judge_arm(str(config_path))
