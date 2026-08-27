@@ -8,7 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlmodel import SQLModel
 
-from app.db.models import EvalExample, Run, RunResult  # noqa: F401 -- registers metadata
+from app.db.models import EvalExample, JudgeCalibrationLabel, Run, RunResult  # noqa: F401 -- registers metadata
 
 load_dotenv()
 
