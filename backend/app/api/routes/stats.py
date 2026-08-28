@@ -2,11 +2,13 @@ from itertools import combinations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from app.db.models import Run
+from app.db.models import JudgeCalibrationLabel, Run, RunResult
 from app.db.session import get_session
+from app.judge.calibration import calibration_report
 from app.stats.aggregation import ALLOWED_METRICS, load_metric_by_example, summarize_arms
 from app.stats.bayesian import equivalence_probability
 from app.stats.errors import InsufficientDataError
@@ -66,6 +68,15 @@ class ArmSummaryResponse(BaseModel):
     mean_cost_estimate_usd: float | None
     mean_prompt_tokens: float | None
     mean_completion_tokens: float | None
+
+
+class CalibrationResponse(BaseModel):
+    run_id: int
+    n: int
+    spearman_r: float
+    spearman_p: float
+    cohens_kappa: float
+    mean_abs_diff: float
 
 
 async def _load_run_or_404(run_id: int, session: AsyncSession) -> Run:
@@ -132,6 +143,30 @@ async def run_summary(run_id: int, session: AsyncSession = Depends(get_session))
     run = await _load_run_or_404(run_id, session)
     summaries = await summarize_arms(session, run_id, run.arm_names)
     return [ArmSummaryResponse(**vars(s)) for s in summaries]
+
+
+@router.get("/{run_id}/calibration", response_model=CalibrationResponse)
+async def calibration(run_id: int, session: AsyncSession = Depends(get_session)):
+    await _load_run_or_404(run_id, session)
+
+    result = await session.execute(
+        select(RunResult.judge_score, JudgeCalibrationLabel.human_score)
+        .join(JudgeCalibrationLabel, JudgeCalibrationLabel.run_result_id == RunResult.id)
+        .where(RunResult.run_id == run_id)
+    )
+    pairs = [(judge_score, human_score) for judge_score, human_score in result.all()]
+    if not pairs:
+        raise HTTPException(status_code=404, detail="No calibration labels for this run")
+
+    report = calibration_report(pairs)
+    return CalibrationResponse(
+        run_id=run_id,
+        n=report["n"],
+        spearman_r=report["spearman_r"],
+        spearman_p=report["spearman_p"],
+        cohens_kappa=report["cohens_kappa"],
+        mean_abs_diff=report["mean_abs_diff"],
+    )
 
 
 @router.get("/{run_id}/equivalence", response_model=EquivalenceResponse)

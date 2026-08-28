@@ -3,10 +3,10 @@ from collections.abc import AsyncGenerator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import delete
+from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.models import EvalExample, Run, RunResult
+from app.db.models import EvalExample, JudgeCalibrationLabel, Run, RunResult
 from app.db.session import get_session
 from app.main import app
 from tests.conftest import db_test_engine, postgres_reachable
@@ -79,6 +79,26 @@ def _insert_result(
             await session.commit()
 
     asyncio.run(_run())
+
+
+def _insert_calibration_label(run_result_id: int, human_score: int) -> None:
+    async def _run():
+        async with AsyncSession(db_test_engine) as session:
+            session.add(
+                JudgeCalibrationLabel(run_result_id=run_result_id, human_score=human_score, labeled_by="test")
+            )
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def _completed_run_result_ids(run_id: int) -> list[int]:
+    async def _run():
+        async with AsyncSession(db_test_engine) as session:
+            result = await session.execute(select(RunResult.id).where(RunResult.run_id == run_id).order_by(RunResult.id))
+            return list(result.scalars().all())
+
+    return asyncio.run(_run())
 
 
 def _cleanup(run_id: int, example_ids: list[int]) -> None:
@@ -295,3 +315,37 @@ def test_run_summary_returns_per_arm_means():
 def test_run_summary_404_for_missing_run():
     response = TestClient(app).get("/runs/999999999/summary")
     assert response.status_code == 404
+
+
+def test_calibration_returns_agreement_stats():
+    run_id, example_ids = _seed_two_arm_run_judge_score(n_examples=4, offset=0.0)
+    try:
+        result_ids = _completed_run_result_ids(run_id)
+        for result_id in result_ids:
+            _insert_calibration_label(result_id, human_score=3)
+
+        response = TestClient(app).get(f"/runs/{run_id}/calibration")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["run_id"] == run_id
+        assert body["n"] == len(result_ids)
+        assert "spearman_r" in body
+        assert "cohens_kappa" in body
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_calibration_404_when_no_labels():
+    run_id, example_ids = _seed_two_arm_run_judge_score(n_examples=4, offset=0.0)
+    try:
+        response = TestClient(app).get(f"/runs/{run_id}/calibration")
+        assert response.status_code == 404
+        assert "No calibration labels" in response.json()["detail"]
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_calibration_404_for_missing_run():
+    response = TestClient(app).get("/runs/999999999/calibration")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Run not found"
