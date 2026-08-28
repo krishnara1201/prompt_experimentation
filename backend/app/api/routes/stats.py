@@ -7,7 +7,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.db.models import Run
 from app.db.session import get_session
-from app.stats.aggregation import ALLOWED_METRICS, load_metric_by_example
+from app.stats.aggregation import ALLOWED_METRICS, load_metric_by_example, summarize_arms
 from app.stats.bayesian import equivalence_probability
 from app.stats.errors import InsufficientDataError
 from app.stats.paired_tests import compare_pair, correct_pairwise_pvalues, paired_diffs
@@ -56,6 +56,16 @@ class PowerResponse(BaseModel):
     required_n: int
     achieved_power: float
     n_excluded: int
+
+
+class ArmSummaryResponse(BaseModel):
+    arm_name: str
+    n: int
+    mean_judge_score: float | None
+    mean_latency_ms: float | None
+    mean_cost_estimate_usd: float | None
+    mean_prompt_tokens: float | None
+    mean_completion_tokens: float | None
 
 
 async def _load_run_or_404(run_id: int, session: AsyncSession) -> Run:
@@ -115,6 +125,13 @@ async def compare_arms(
 
     correct_pairwise_pvalues(results)
     return [PairedComparisonResponse(**vars(r)) for r in results]
+
+
+@router.get("/{run_id}/summary", response_model=list[ArmSummaryResponse])
+async def run_summary(run_id: int, session: AsyncSession = Depends(get_session)):
+    run = await _load_run_or_404(run_id, session)
+    summaries = await summarize_arms(session, run_id, run.arm_names)
+    return [ArmSummaryResponse(**vars(s)) for s in summaries]
 
 
 @router.get("/{run_id}/equivalence", response_model=EquivalenceResponse)

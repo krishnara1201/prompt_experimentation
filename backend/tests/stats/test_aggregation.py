@@ -4,7 +4,7 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.models import EvalExample, Run, RunResult
-from app.stats.aggregation import load_metric_by_example
+from app.stats.aggregation import load_metric_by_example, summarize_arms
 from tests.conftest import db_test_engine, postgres_reachable
 
 pytestmark = pytest.mark.skipif(
@@ -175,3 +175,63 @@ def test_rejects_unknown_metric():
 
     with pytest.raises(ValueError):
         asyncio.run(_query())
+
+
+def test_summarize_arms_computes_means_and_completed_count():
+    example_ids = _insert_examples(2)
+    run_id = _insert_run(["arm-a"])
+    try:
+        _insert_result(run_id, example_ids[0], "arm-a", 0, judge_score=4.0, latency_ms=100.0)
+        _insert_result(run_id, example_ids[1], "arm-a", 0, judge_score=2.0, latency_ms=200.0)
+
+        async def _query():
+            async with AsyncSession(db_test_engine) as session:
+                return await summarize_arms(session, run_id, ["arm-a"])
+
+        result = asyncio.run(_query())
+        assert len(result) == 1
+        summary = result[0]
+        assert summary.arm_name == "arm-a"
+        assert summary.n == 2
+        assert summary.mean_judge_score == pytest.approx(3.0)
+        assert summary.mean_latency_ms == pytest.approx(150.0)
+        assert summary.mean_cost_estimate_usd is None
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_summarize_arms_excludes_non_completed_rows():
+    example_ids = _insert_examples(2)
+    run_id = _insert_run(["arm-a"])
+    try:
+        _insert_result(run_id, example_ids[0], "arm-a", 0, status="failed", latency_ms=999.0)
+        _insert_result(run_id, example_ids[1], "arm-a", 0, status="completed", latency_ms=50.0)
+
+        async def _query():
+            async with AsyncSession(db_test_engine) as session:
+                return await summarize_arms(session, run_id, ["arm-a"])
+
+        result = asyncio.run(_query())
+        summary = result[0]
+        assert summary.n == 1
+        assert summary.mean_latency_ms == pytest.approx(50.0)
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_summarize_arms_returns_arms_in_requested_order_with_zero_n_when_absent():
+    example_ids = _insert_examples(1)
+    run_id = _insert_run(["arm-a", "arm-b"])
+    try:
+        _insert_result(run_id, example_ids[0], "arm-a", 0, latency_ms=10.0)
+
+        async def _query():
+            async with AsyncSession(db_test_engine) as session:
+                return await summarize_arms(session, run_id, ["arm-a", "arm-b"])
+
+        result = asyncio.run(_query())
+        assert [s.arm_name for s in result] == ["arm-a", "arm-b"]
+        assert result[1].n == 0
+        assert result[1].mean_latency_ms is None
+    finally:
+        _cleanup(run_id, example_ids)

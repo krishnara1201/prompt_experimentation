@@ -276,3 +276,22 @@ def test_compare_arms_422_for_bootstrap_samples_over_cap():
         assert response.status_code == 422
     finally:
         _cleanup(run_id, example_ids)
+
+
+def test_run_summary_returns_per_arm_means():
+    run_id, example_ids = _seed_two_arm_run_judge_score(n_examples=4, offset=1.0)
+    try:
+        response = TestClient(app).get(f"/runs/{run_id}/summary")
+        assert response.status_code == 200
+        body = {row["arm_name"]: row for row in response.json()}
+        assert body["arm-a"]["n"] == 4
+        assert body["arm-a"]["mean_judge_score"] == pytest.approx(2.5)
+        assert body["arm-b"]["mean_judge_score"] == pytest.approx(1.5)
+        assert body["arm-a"]["mean_cost_estimate_usd"] is None
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_run_summary_404_for_missing_run():
+    response = TestClient(app).get("/runs/999999999/summary")
+    assert response.status_code == 404
