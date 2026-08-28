@@ -318,6 +318,43 @@ def test_run_summary_404_for_missing_run():
 
 
 def test_calibration_returns_agreement_stats():
+    # With offset=0.0, _seed_two_arm_run_judge_score produces judge_score
+    # pairs (arm-a, arm-b) of (0,0), (1,1), (2,2), (3,3) in insertion order,
+    # i.e. judge_scores = [0, 0, 1, 1, 2, 2, 3, 3] across the 8 results
+    # returned by _completed_run_result_ids (ordered by id). Pairing that
+    # with human_scores = [1, 1, 2, 2, 3, 3, 4, 4] (same tie structure,
+    # monotonically related as human = judge + 1) is a non-degenerate,
+    # perfectly-correlated input -- unlike the old version of this test,
+    # which seeded every label with the same human_score=3 and therefore
+    # exercised scipy's NaN-producing degenerate case while only asserting
+    # key presence, silently certifying a broken response as healthy.
+    run_id, example_ids = _seed_two_arm_run_judge_score(n_examples=4, offset=0.0)
+    try:
+        result_ids = _completed_run_result_ids(run_id)
+        human_scores = [1, 1, 2, 2, 3, 3, 4, 4]
+        assert len(result_ids) == len(human_scores)
+        for result_id, human_score in zip(result_ids, human_scores, strict=True):
+            _insert_calibration_label(result_id, human_score=human_score)
+
+        response = TestClient(app).get(f"/runs/{run_id}/calibration")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["run_id"] == run_id
+        assert body["n"] == len(result_ids)
+        assert body["spearman_r"] is not None
+        assert body["spearman_p"] is not None
+        assert body["spearman_r"] == pytest.approx(1.0, abs=1e-6)
+        assert "cohens_kappa" in body
+    finally:
+        _cleanup(run_id, example_ids)
+
+
+def test_calibration_returns_none_for_degenerate_spearman():
+    # Regression test: scipy.stats.spearmanr returns nan for both the
+    # statistic and the p-value when the human-score input is constant.
+    # The endpoint must convert that nan to an explicit JSON null and
+    # return 200, not let a NaN leak onto the wire (which the frontend
+    # can't render) or crash.
     run_id, example_ids = _seed_two_arm_run_judge_score(n_examples=4, offset=0.0)
     try:
         result_ids = _completed_run_result_ids(run_id)
@@ -329,8 +366,8 @@ def test_calibration_returns_agreement_stats():
         body = response.json()
         assert body["run_id"] == run_id
         assert body["n"] == len(result_ids)
-        assert "spearman_r" in body
-        assert "cohens_kappa" in body
+        assert body["spearman_r"] is None
+        assert body["spearman_p"] is None
     finally:
         _cleanup(run_id, example_ids)
 

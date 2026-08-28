@@ -3,7 +3,11 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { RunListPage } from './pages/RunListPage';
 import { RunDashboardPage } from './pages/RunDashboardPage';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false },
+  },
+});
 
 export function App() {
   return (

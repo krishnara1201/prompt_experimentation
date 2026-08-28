@@ -1,3 +1,4 @@
+import math
 from itertools import combinations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -73,8 +74,8 @@ class ArmSummaryResponse(BaseModel):
 class CalibrationResponse(BaseModel):
     run_id: int
     n: int
-    spearman_r: float
-    spearman_p: float
+    spearman_r: float | None
+    spearman_p: float | None
     cohens_kappa: float
     mean_abs_diff: float
 
@@ -84,6 +85,10 @@ async def _load_run_or_404(run_id: int, session: AsyncSession) -> Run:
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
+
+
+def _nan_to_none(x: float) -> float | None:
+    return None if math.isnan(x) else x
 
 
 def _validate_metric(metric: str) -> None:
@@ -162,8 +167,8 @@ async def calibration(run_id: int, session: AsyncSession = Depends(get_session))
     return CalibrationResponse(
         run_id=run_id,
         n=report["n"],
-        spearman_r=report["spearman_r"],
-        spearman_p=report["spearman_p"],
+        spearman_r=_nan_to_none(report["spearman_r"]),
+        spearman_p=_nan_to_none(report["spearman_p"]),
         cohens_kappa=report["cohens_kappa"],
         mean_abs_diff=report["mean_abs_diff"],
     )

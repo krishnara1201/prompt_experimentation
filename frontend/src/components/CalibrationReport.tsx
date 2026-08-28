@@ -5,7 +5,6 @@ export function CalibrationReport({ runId }: { runId: number }) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['run-calibration', runId],
     queryFn: () => fetchCalibration(runId),
-    retry: false,
   });
 
   if (isLoading) {
@@ -39,7 +38,7 @@ export function CalibrationReport({ runId }: { runId: number }) {
       <dd>{data.n}</dd>
       <dt className="text-gray-500">Spearman r</dt>
       <dd>
-        {data.spearman_r.toFixed(3)} (p = {data.spearman_p.toFixed(3)})
+        {data.spearman_r?.toFixed(3) ?? '—'} (p = {data.spearman_p?.toFixed(3) ?? '—'})
       </dd>
       <dt className="text-gray-500">Cohen&apos;s kappa</dt>
       <dd>{data.cohens_kappa.toFixed(3)}</dd>

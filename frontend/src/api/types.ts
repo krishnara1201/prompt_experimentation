@@ -36,8 +36,8 @@ export interface PairedComparisonResponse {
 export interface CalibrationResponse {
   run_id: number;
   n: number;
-  spearman_r: number;
-  spearman_p: number;
+  spearman_r: number | null;
+  spearman_p: number | null;
   cohens_kappa: number;
   mean_abs_diff: number;
 }

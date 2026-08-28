@@ -1,5 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
+import {
+  CartesianGrid,
+  LabelList,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+  ZAxis,
+} from 'recharts';
 import { fetchRunSummary } from '../api/client';
 import { QueryState } from './QueryState';
 
@@ -9,6 +19,7 @@ interface FrontierPoint {
   quality: number;
   latency: number;
   noCost: boolean;
+  noQuality: boolean;
 }
 
 export function FrontierChart({ runId }: { runId: number }) {
@@ -23,6 +34,7 @@ export function FrontierChart({ runId }: { runId: number }) {
     quality: row.mean_judge_score ?? 0,
     latency: row.mean_latency_ms ?? 0,
     noCost: row.mean_cost_estimate_usd === null,
+    noQuality: row.mean_judge_score === null,
   }));
 
   return (
@@ -41,14 +53,16 @@ export function FrontierChart({ runId }: { runId: number }) {
               return (
                 <div className="rounded border bg-white p-2 text-xs shadow">
                   <p className="font-medium">{point.arm_name}</p>
-                  <p>Quality: {point.quality.toFixed(2)}</p>
+                  <p>{point.noQuality ? 'Quality: not yet judged' : `Quality: ${point.quality.toFixed(2)}`}</p>
                   <p>Cost: {point.noCost ? 'no per-token cost — local compute' : `$${point.cost.toFixed(4)}`}</p>
                   <p>Latency: {point.latency.toFixed(0)} ms</p>
                 </div>
               );
             }}
           />
-          <Scatter data={points} fill="#2563eb" />
+          <Scatter data={points} fill="#2563eb">
+            <LabelList dataKey="arm_name" position="top" />
+          </Scatter>
         </ScatterChart>
       </ResponsiveContainer>
     </QueryState>

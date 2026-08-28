@@ -45,7 +45,9 @@ export function RunListPage() {
                       #{run.run_id}
                     </Link>
                   </td>
-                  <td>{new Date(run.created_at).toLocaleString()}</td>
+                  {/* Backend stores naive UTC (no offset in the string), so append 'Z'
+                      to make Date parse it as UTC instead of local time. */}
+                  <td>{new Date(run.created_at + 'Z').toLocaleString()}</td>
                   <td>{run.arm_names.join(', ')}</td>
                   <td>
                     <StatusBadge status={run.status} />
