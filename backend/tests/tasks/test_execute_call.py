@@ -14,13 +14,35 @@ class FakeAdapter:
     def __init__(self, outcomes):
         self._outcomes = list(outcomes)
         self.calls = 0
+        self.prompts = []
 
     def generate(self, prompt):
+        self.prompts.append(prompt)
         outcome = self._outcomes[self.calls]
         self.calls += 1
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+
+def test_sends_task_framed_prompt_not_bare_example_text(monkeypatch):
+    adapter = FakeAdapter([SUCCESS])
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    monkeypatch.setattr(worker, "_persist_run_result", AsyncMock())
+    monkeypatch.setattr(worker, "run_judge_call", MagicMock())
+
+    example_text = "Widgets Inc reported record profits ."
+    worker.execute_call(run_id=1, example_id=2, example_text=example_text, arm_name="fake-arm", repeat_index=0)
+
+    assert adapter.calls == 1
+    sent_prompt = adapter.prompts[0]
+    # A bare, unframed sentence is ambiguous input -- different models guess
+    # the implied task ("classify this sentence's sentiment") with different
+    # reliability. The prompt sent to the model must say what to do, not
+    # just forward the raw eval-example text.
+    assert sent_prompt != example_text
+    assert example_text in sent_prompt
+    assert "sentiment" in sent_prompt.lower()
 
 
 def test_succeeds_on_first_try(monkeypatch):
