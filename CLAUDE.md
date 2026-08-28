@@ -134,8 +134,14 @@ a local model and hosted API models.
    (`backend/app/api/routes/stats.py`). Spec:
    `docs/superpowers/specs/2026-08-27-stats-layer-design.md`; plan:
    `docs/superpowers/plans/2026-08-27-stats-layer.md`.
-5. **Dashboard** — win-rate table with CIs, cost/latency/quality frontier,
-   judge calibration report.
+5. **Dashboard** ✅ **Done.** React app (`frontend/`) — run list with live
+   status polling, and a per-run tabbed view: win-rate table (pairwise
+   quality diff + CI + corrected p-value), cost/latency/quality frontier
+   scatter, and judge calibration report. Backed by three new read-only
+   endpoints (`GET /runs`, `/runs/{run_id}/summary`,
+   `/runs/{run_id}/calibration`). Spec:
+   `docs/superpowers/specs/2026-08-27-dashboard-design.md`; plan:
+   `docs/superpowers/plans/2026-08-27-dashboard.md`.
 6. **Agent-facing judge tool** — expose the judge layer (Phase 3) as a
    callable tool so local coding agents (e.g. Claude Code sessions) can use
    this platform's calibrated rubric judge directly, independent of the
