@@ -152,7 +152,7 @@ async def calibration(run_id: int, session: AsyncSession = Depends(get_session))
     result = await session.execute(
         select(RunResult.judge_score, JudgeCalibrationLabel.human_score)
         .join(JudgeCalibrationLabel, JudgeCalibrationLabel.run_result_id == RunResult.id)
-        .where(RunResult.run_id == run_id)
+        .where(RunResult.run_id == run_id, RunResult.judge_status == "completed")
     )
     pairs = [(judge_score, human_score) for judge_score, human_score in result.all()]
     if not pairs:

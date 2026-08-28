@@ -349,3 +349,72 @@ def test_calibration_404_for_missing_run():
     response = TestClient(app).get("/runs/999999999/calibration")
     assert response.status_code == 404
     assert response.json()["detail"] == "Run not found"
+
+
+def test_calibration_filters_on_judge_status_completed():
+    """Verify that calibration endpoint only counts results with judge_status='completed'.
+
+    This tests the fix for the issue where a RunResult with judge_score=None
+    (because judge_status != "completed") could reach cohens_kappa() and raise a TypeError.
+    The endpoint should filter on judge_status="completed" to exclude pending results.
+    """
+    example_ids = _insert_examples(2)
+    run_id = _insert_run(["arm-a"])
+    try:
+        # Insert first result with judge_status="completed" and a calibration label
+        result_id_completed = None
+        async def _get_id():
+            async with AsyncSession(db_test_engine) as session:
+                r = RunResult(
+                    run_id=run_id,
+                    example_id=example_ids[0],
+                    arm_name="arm-a",
+                    repeat_index=0,
+                    status="completed",
+                    judge_status="completed",
+                    judge_score=4.0,
+                    output_text="output1",
+                )
+                session.add(r)
+                await session.commit()
+                await session.refresh(r)
+                return r.id
+        result_id_completed = asyncio.run(_get_id())
+
+        # Insert second result with judge_status="pending" (judge_score=None) and a calibration label
+        result_id_pending = None
+        async def _get_id_pending():
+            async with AsyncSession(db_test_engine) as session:
+                r = RunResult(
+                    run_id=run_id,
+                    example_id=example_ids[1],
+                    arm_name="arm-a",
+                    repeat_index=0,
+                    status="completed",
+                    judge_status="pending",
+                    judge_score=None,
+                    output_text="output2",
+                )
+                session.add(r)
+                await session.commit()
+                await session.refresh(r)
+                return r.id
+        result_id_pending = asyncio.run(_get_id_pending())
+
+        # Add calibration labels to both results
+        _insert_calibration_label(result_id_completed, human_score=4)
+        _insert_calibration_label(result_id_pending, human_score=4)
+
+        # Call the calibration endpoint
+        response = TestClient(app).get(f"/runs/{run_id}/calibration")
+
+        # Should return 200 (not crash with 500)
+        assert response.status_code == 200
+        body = response.json()
+
+        # Should only count the completed result (n=1)
+        assert body["n"] == 1
+        assert body["run_id"] == run_id
+
+    finally:
+        _cleanup(run_id, example_ids)
