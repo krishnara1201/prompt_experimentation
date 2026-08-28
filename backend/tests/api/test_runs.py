@@ -294,3 +294,37 @@ def test_get_run_results_returns_rows_ordered_by_id():
 def test_get_run_status_404_for_missing_run():
     response = TestClient(app).get("/runs/999999999")
     assert response.status_code == 404
+
+
+def test_list_runs_includes_status_and_counts():
+    example_id = _insert_example()
+    run_id = _insert_run(total_calls=3)
+    try:
+        _insert_results(run_id, example_id, ["completed", "failed"])
+
+        response = TestClient(app).get("/runs")
+        assert response.status_code == 200
+        rows = {row["run_id"]: row for row in response.json()}
+        assert run_id in rows
+        row = rows[run_id]
+        assert row["status"] == "running"
+        assert row["total_calls"] == 3
+        assert row["completed"] == 1
+        assert row["failed"] == 1
+        assert row["pending"] == 1
+        assert row["arm_names"] == ["fake-arm"]
+    finally:
+        _delete_run(run_id)
+        _delete_example(example_id)
+
+
+def test_list_runs_ordered_newest_first():
+    run_id_a = _insert_run(total_calls=1)
+    run_id_b = _insert_run(total_calls=1)
+    try:
+        rows = TestClient(app).get("/runs").json()
+        ids = [row["run_id"] for row in rows]
+        assert ids.index(run_id_b) < ids.index(run_id_a)
+    finally:
+        _delete_run(run_id_a)
+        _delete_run(run_id_b)

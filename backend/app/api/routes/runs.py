@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 import random
 
@@ -41,6 +42,64 @@ class RunStatusResponse(BaseModel):
     completed: int
     failed: int
     pending: int
+
+
+class RunSummary(BaseModel):
+    run_id: int
+    created_at: datetime
+    arm_names: list[str]
+    status: str
+    total_calls: int
+    completed: int
+    failed: int
+    pending: int
+
+
+def _status_from_counts(total_calls: int, completed: int, failed: int) -> tuple[str, int]:
+    done = completed + failed
+    pending = total_calls - done
+    if done == 0:
+        status = "pending"
+    elif done < total_calls:
+        status = "running"
+    elif failed == 0:
+        status = "completed"
+    else:
+        status = "completed_with_errors"
+    return status, pending
+
+
+@router.get("", response_model=list[RunSummary])
+async def list_runs(session: AsyncSession = Depends(get_session)) -> list[RunSummary]:
+    runs_result = await session.execute(select(Run).order_by(Run.created_at.desc()))
+    runs = runs_result.scalars().all()
+
+    counts_result = await session.execute(
+        select(RunResult.run_id, RunResult.status, func.count()).group_by(RunResult.run_id, RunResult.status)
+    )
+    counts_by_run: dict[int, dict[str, int]] = {}
+    for run_id, status, count in counts_result.all():
+        counts_by_run.setdefault(run_id, {})[status] = count
+
+    summaries = []
+    for run in runs:
+        counts = counts_by_run.get(run.id, {})
+        completed = counts.get("completed", 0)
+        failed = counts.get("failed", 0)
+        status, pending = _status_from_counts(run.total_calls, completed, failed)
+        summaries.append(
+            RunSummary(
+                run_id=run.id,
+                created_at=run.created_at,
+                arm_names=run.arm_names,
+                status=status,
+                total_calls=run.total_calls,
+                completed=completed,
+                failed=failed,
+                pending=pending,
+            )
+        )
+    return summaries
 
 
 @router.post("", response_model=RunCreateResponse)
@@ -124,17 +183,7 @@ async def get_run_status(run_id: int, session: AsyncSession = Depends(get_sessio
     counts = dict(counts_result.all())
     completed = counts.get("completed", 0)
     failed = counts.get("failed", 0)
-    done = completed + failed
-    pending = run.total_calls - done
-
-    if done == 0:
-        status = "pending"
-    elif done < run.total_calls:
-        status = "running"
-    elif failed == 0:
-        status = "completed"
-    else:
-        status = "completed_with_errors"
+    status, pending = _status_from_counts(run.total_calls, completed, failed)
 
     return RunStatusResponse(
         run_id=run.id,
