@@ -194,9 +194,14 @@ def test_still_retries_429(monkeypatch):
     assert kwargs["status"] == "completed"
 
 
+class _FakeSubscriptionJudgeAdapter:
+    celery_queue = "subscription_cli"
+
+
 def test_enqueues_judge_call_after_successful_persist(monkeypatch):
     adapter = FakeAdapter([SUCCESS])
     monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    monkeypatch.setattr(worker, "load_judge_arm", lambda path: object())
     persist_mock = AsyncMock(return_value=42)
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     judge_task_mock = MagicMock()
@@ -205,7 +210,26 @@ def test_enqueues_judge_call_after_successful_persist(monkeypatch):
 
     worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
 
-    judge_task_mock.delay.assert_called_once_with(run_result_id=42)
+    judge_task_mock.apply_async.assert_called_once_with(kwargs={"run_result_id": 42}, queue="celery")
+
+
+def test_enqueues_judge_call_on_judge_adapters_dedicated_queue(monkeypatch):
+    # A subscription-CLI judge (e.g. claude_code_cli) must be routed to its
+    # own celery_queue, same as a subscription-CLI eval arm already is --
+    # the CLI binary/auth only exists where that dedicated worker runs, not
+    # on the default queue's workers.
+    adapter = FakeAdapter([SUCCESS])
+    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": adapter})
+    monkeypatch.setattr(worker, "load_judge_arm", lambda path: _FakeSubscriptionJudgeAdapter())
+    persist_mock = AsyncMock(return_value=42)
+    monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
+    judge_task_mock = MagicMock()
+    monkeypatch.setattr(worker, "run_judge_call", judge_task_mock)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
+
+    judge_task_mock.apply_async.assert_called_once_with(kwargs={"run_result_id": 42}, queue="subscription_cli")
 
 
 def test_does_not_enqueue_judge_call_on_failure(monkeypatch):
@@ -218,7 +242,7 @@ def test_does_not_enqueue_judge_call_on_failure(monkeypatch):
 
     worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0, max_retries=3)
 
-    judge_task_mock.delay.assert_not_called()
+    judge_task_mock.apply_async.assert_not_called()
 
 
 def test_db_failure_after_success_does_not_retry_the_model_call(monkeypatch):

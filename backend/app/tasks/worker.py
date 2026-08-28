@@ -271,7 +271,12 @@ def execute_call(
             response=response,
         )
     )
-    run_judge_call.delay(run_result_id=result_id)
+    # A subscription-CLI judge (celery_queue="subscription_cli") only has a
+    # CLI binary/authenticated session on its own dedicated worker, same as
+    # a subscription-CLI eval arm -- .delay() would enqueue to the default
+    # queue and hang forever with nothing eligible to consume it.
+    judge_queue = getattr(load_judge_arm(str(ARMS_PATH)), "celery_queue", "celery")
+    run_judge_call.apply_async(kwargs={"run_result_id": result_id}, queue=judge_queue)
 
 
 @celery_app.task(bind=True)
