@@ -148,8 +148,12 @@ a local model and hosted API models.
    `judge/scorer.py:score_output`, so a Claude Code session (or any other
    MCP client) can score a candidate response against a gold label
    directly, without running a full eval. Discovered automatically via the
-   repo-root `.mcp.json`. Spec:
-   `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`.
+   repo-root `.mcp.json`. The tool response also carries `judge_model` (call
+   provenance, since the `judge:` config reloads per call), and rejects
+   blank `input_text`/`model_output` or an out-of-domain `gold_label` before
+   making a judge call. Spec:
+   `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`
+   (see the 2026-08-29 post-implementation amendment).
 7. **Stretch** — LoRA fine-tune the local model on a subset of the task;
    compare fine-tuned local vs. base local vs. API arms.
 
