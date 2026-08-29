@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict
 
 from dotenv import load_dotenv
 from mcp.server.mcpserver import MCPServer
@@ -10,6 +10,11 @@ from app.judge.scorer import score_output
 
 ARMS_PATH = Path(__file__).resolve().parent.parent / "arms.yaml"
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+
+class ScoreResult(TypedDict):
+    score: int
+    rationale: str
 
 
 def _load_dotenv_if_present() -> None:
@@ -26,7 +31,7 @@ def _score_financial_sentiment(
     gold_label: str,
     model_output: str,
     adapter: ModelAdapter | None = None,
-) -> dict:
+) -> ScoreResult:
     if adapter is None:
         adapter = load_judge_arm(str(ARMS_PATH))
     result = score_output(adapter, input_text, gold_label, model_output)
@@ -38,7 +43,7 @@ def score_financial_sentiment(
     input_text: str,
     gold_label: Literal["positive", "negative", "neutral"],
     model_output: str,
-) -> dict:
+) -> ScoreResult:
     """Score a candidate financial-sentiment response (1-5) against a gold label ("positive", "negative", or "neutral"), using this platform's fixed rubric judge."""
     return _score_financial_sentiment(input_text, gold_label, model_output)
 

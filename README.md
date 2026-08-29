@@ -115,6 +115,15 @@ published to `127.0.0.1`. See "Subscription-seat CLI arms" in
 See `backend/README.md` and `frontend/README.md` for native setup
 (`uv sync` / `npm install`, Ollama, migrations, `npm run dev`).
 
+## Agent-facing judge tool
+
+The repo-root `.mcp.json` registers an MCP tool, `score_financial_sentiment`,
+for any Claude Code session opened in this repo (standard project-scoped-
+server approval prompt applies) — it lets a coding agent score one
+candidate financial-sentiment response against a gold label directly,
+without running a full eval. See "Phase 6" in `backend/README.md` for the
+tool signature and how to use it from another MCP client.
+
 ## Tech stack
 
 Python, FastAPI, SQLModel, Celery, Redis, PostgreSQL, Alembic, Ollama,

@@ -65,6 +65,16 @@ def test_mcp_server_instance_has_expected_name():
     assert mcp.name == "financial-sentiment-judge"
 
 
+def test_score_financial_sentiment_tool_publishes_structured_output_schema():
+    from app.mcp_judge_server import mcp
+
+    tool = mcp._tool_manager.get_tool("score_financial_sentiment")
+
+    assert tool is not None
+    assert tool.output_schema is not None
+    assert set(tool.output_schema["properties"]) == {"score", "rationale"}
+
+
 def test_dotenv_is_loaded_from_backend_env_file(monkeypatch, tmp_path):
     from app import mcp_judge_server as mjs
 

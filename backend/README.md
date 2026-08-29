@@ -223,6 +223,12 @@ prompt applies). To use it from another MCP client, or to run it directly:
 uv run --directory backend python -m app.mcp_judge_server
 ```
 
+The `.mcp.json` command (`--directory backend`) is relative to the
+client's own working directory, not an absolute path — correct for Claude
+Code, which launches project-scoped servers from the repo root, but a
+client that spawns from elsewhere should point its own MCP config at an
+absolute path instead.
+
 Tool: `score_financial_sentiment(input_text, gold_label, model_output) ->
 {"score": 1-5, "rationale": str}`, using the same fixed rubric and `judge:`
 config in `arms.yaml` as the automated pipeline. The judge config is
