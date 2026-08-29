@@ -337,6 +337,50 @@ this judge agrees with human labels.
 Ad-hoc calls are **not persisted** — this is for disposable checks during
 iteration, not part of the auditable `RunResult` / judge-score history.
 
+### Example session
+
+Spot-checking three candidate outputs from a sentiment classifier while
+iterating on its prompt (real responses from the default `opus` judge):
+
+```
+> score_financial_sentiment(
+    input_text="Nokia's Q3 net sales rose 9% year-on-year to EUR 5.7bn, beating estimates.",
+    gold_label="positive",
+    model_output="This is positive sentiment. Sales grew 9% and exceeded analyst expectations.")
+
+  { "score": 5,
+    "rationale": "The response correctly and directly identifies the sentiment as
+                  positive, citing the 9% sales growth and the earnings beat as
+                  justification.",
+    "judge_model": "opus" }
+
+> score_financial_sentiment(
+    input_text="The company said it will cut 1,200 jobs and close two factories as demand slumps.",
+    gold_label="negative",
+    model_output="Positive — restructuring will make the company leaner and more efficient.")
+
+  { "score": 2,
+    "rationale": "The response is coherent and on-topic but assigns positive
+                  sentiment to clearly negative news about layoffs, factory
+                  closures, and slumping demand.",
+    "judge_model": "opus" }
+
+> score_financial_sentiment(
+    input_text="The company will hold its annual general meeting on 25 March in Helsinki.",
+    gold_label="neutral",
+    model_output="Neutral. This is a factual scheduling announcement with no financial implication.")
+
+  { "score": 5,
+    "rationale": "The model correctly identifies the sentiment as neutral and gives
+                  a clear, concise justification that matches the factual,
+                  non-financial nature of the announcement.",
+    "judge_model": "opus" }
+```
+
+The middle case is the useful signal: the classifier confidently inverted a
+layoffs headline, and the judge caught it with a 2 (wrong sentiment, but
+coherent) rather than a 1.
+
 ### Errors
 
 - `gold_label` outside `{"positive", "negative", "neutral"}`, or a blank
