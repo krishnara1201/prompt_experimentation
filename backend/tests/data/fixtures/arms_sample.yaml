@@ -1,0 +1,10 @@
+arms:
+  - name: qwen3-8b-local
+    adapter: openai_compatible
+    base_url: http://172.30.0.127:11434/v1
+    model: qwen3:8b
+    max_tokens: 1024
+  - name: gpt-4o-mini
+    adapter: openai_compatible
+    base_url: https://api.openai.com/v1
+    model: gpt-4o-mini
