@@ -23,8 +23,14 @@ calibrate_app = typer.Typer(
     help="Judge calibration workflow (runs on the host; needs a local .env).",
     no_args_is_help=True,
 )
+finetune_app = typer.Typer(
+    help="Local LoRA fine-tune workflow (runs on the host; needs a CUDA GPU "
+    "and `uv sync --extra training`).",
+    no_args_is_help=True,
+)
 app.add_typer(stats_app, name="stats")
 app.add_typer(calibrate_app, name="calibrate")
+app.add_typer(finetune_app, name="finetune")
 
 _TERMINAL = {"completed", "completed_with_errors"}
 
@@ -236,3 +242,56 @@ def calibrate_import(
 def calibrate_report(run_id: int = typer.Option(..., "--run-id")):
     """Print judge/human agreement (Spearman, Cohen's kappa) for a run."""
     backend_script("scripts.calibration_report", "--run-id", str(run_id))
+
+
+# --- finetune -----------------------------------------------
+
+
+@finetune_app.command("prep")
+def finetune_prep(config: str = typer.Option("training.yaml", "--config")):
+    """Build + leakage-check the fine-tuning dataset."""
+    backend_script("scripts.finetune_prep", "--config", config)
+
+
+@finetune_app.command("train")
+def finetune_train(
+    config: str = typer.Option("training.yaml", "--config"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Dataset + config only; no GPU."),
+    reuse_dataset: bool = typer.Option(False, "--reuse-dataset"),
+):
+    """Run the QLoRA fine-tune (GPU-only unless --dry-run)."""
+    extra = []
+    if dry_run:
+        extra.append("--dry-run")
+    if reuse_dataset:
+        extra.append("--reuse-dataset")
+    backend_script("scripts.finetune_train", "--config", config, *extra)
+
+
+@finetune_app.command("export")
+def finetune_export(config: str = typer.Option("training.yaml", "--config")):
+    """Merge -> GGUF -> `ollama create`; print the arms.yaml entry to paste."""
+    backend_script("scripts.finetune_export", "--config", config)
+
+
+@finetune_app.command("report")
+def finetune_report(
+    run_id: int = typer.Option(..., "--run-id"),
+    baseline: str = typer.Option(..., "--baseline", help="Base local arm name."),
+    candidate: list[str] = typer.Option(
+        ..., "--candidate", help="Arm to compare against the baseline (repeatable)."
+    ),
+    epsilon: float = typer.Option(0.5, "--epsilon", help="Equivalence margin on the 1-5 judge scale."),
+    gpu_cost_per_hour: float = typer.Option(0.40, "--gpu-cost-per-hour"),
+    train_seconds: float = typer.Option(0.0, "--train-seconds", help="Wall time of `pe finetune train`."),
+    out: str = typer.Option(
+        "../docs/superpowers/reports/2026-08-29-finetune-comparison.md", "--out"
+    ),
+):
+    """Render the fine-tuned-vs-base-vs-API comparison report from a completed run."""
+    args = ["--run-id", str(run_id), "--baseline", baseline,
+            "--epsilon", str(epsilon), "--gpu-cost-per-hour", str(gpu_cost_per_hour),
+            "--train-seconds", str(train_seconds), "--out", out]
+    for c in candidate:
+        args += ["--candidate", c]
+    backend_script("scripts.finetune_report", *args)

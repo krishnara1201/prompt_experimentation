@@ -154,3 +154,42 @@ def test_repo_root_contains_compose_file():
     from app.cli._shell import repo_root
 
     assert (repo_root() / "docker-compose.yml").is_file()
+
+
+# --- finetune commands -----------------------------------------------
+
+
+def test_finetune_prep_shells_out(captured_argv):
+    result = runner.invoke(app, ["finetune", "prep"])
+    assert result.exit_code == 0
+    assert captured_argv[-1] == ["uv", "run", "python", "-m", "scripts.finetune_prep",
+                                "--config", "training.yaml"]
+
+
+def test_finetune_train_dry_run_passes_flag(captured_argv):
+    result = runner.invoke(app, ["finetune", "train", "--dry-run"])
+    assert result.exit_code == 0
+    assert captured_argv[-1] == ["uv", "run", "python", "-m", "scripts.finetune_train",
+                                "--config", "training.yaml", "--dry-run"]
+
+
+def test_finetune_export_shells_out(captured_argv):
+    result = runner.invoke(app, ["finetune", "export"])
+    assert result.exit_code == 0
+    assert captured_argv[-1] == ["uv", "run", "python", "-m", "scripts.finetune_export",
+                                "--config", "training.yaml"]
+
+
+def test_finetune_report_passes_args(captured_argv):
+    result = runner.invoke(
+        app,
+        ["finetune", "report", "--run-id", "5",
+         "--baseline", "qwen3-8b-local",
+         "--candidate", "ft-qwen3-8b-local",
+         "--candidate", "gpt-4o-mini"],
+    )
+    assert result.exit_code == 0
+    argv = captured_argv[-1]
+    assert argv[:6] == ["uv", "run", "python", "-m", "scripts.finetune_report", "--run-id"]
+    assert "--baseline" in argv and "qwen3-8b-local" in argv
+    assert argv.count("--candidate") == 2
