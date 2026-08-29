@@ -44,3 +44,20 @@ def test_score_financial_sentiment_loads_judge_arm_when_no_adapter_given(monkeyp
 
     assert result == {"score": 5, "rationale": "Nailed it."}
     assert calls == [str(ARMS_PATH)]
+
+
+def test_score_financial_sentiment_tool_is_directly_callable(monkeypatch):
+    fake_adapter = _FakeAdapter("SCORE: 3\nRATIONALE: Hedged but on-topic.")
+    monkeypatch.setattr("app.mcp_judge_server.load_judge_arm", lambda config_path: fake_adapter)
+
+    from app.mcp_judge_server import score_financial_sentiment
+
+    result = score_financial_sentiment("Revenue was flat.", "neutral", "Results were mixed.")
+
+    assert result == {"score": 3, "rationale": "Hedged but on-topic."}
+
+
+def test_mcp_server_instance_has_expected_name():
+    from app.mcp_judge_server import mcp
+
+    assert mcp.name == "financial-sentiment-judge"
