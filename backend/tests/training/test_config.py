@@ -12,8 +12,8 @@ VALID = textwrap.dedent(
     """
     run_name: demo
     base_model: unsloth/Qwen3-8B
-    source_dataset: takala/financial_phrasebank
-    source_config: sentences_75agree
+    source_dataset: odedovadia/financial_phrasebank_split
+    source_config: default
     max_seq_len: 512
     lora_r: 16
     lora_alpha: 16

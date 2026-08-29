@@ -6,13 +6,21 @@ run_name: qwen3-8b-finsent-lora
 # HF weights to fine-tune (full/4bit, NOT the Ollama GGUF).
 base_model: unsloth/Qwen3-8B
 
-# Financial PhraseBank lower-agreement subset -- disjoint from the
-# all-agree eval set after the leakage guard drops the overlap.
-# Downloaded at runtime, not vendored (CC BY-NC-SA 3.0, Malo et al. 2014).
-# takala/financial_phrasebank is public with parquet configs
-# (sentences_50agree / 66agree / 75agree / allagree) -- no trust_remote_code.
-source_dataset: takala/financial_phrasebank
-source_config: sentences_75agree
+# Financial PhraseBank, full 50%-agree corpus (4846 sentences) as a
+# script-free parquet mirror. The all-agree eval set is a subset of it, so
+# the leakage guard drops that overlap (~2260 rows) and leaves ~2580
+# lower-agreement sentences to train on -- disjoint from the eval set by
+# construction. Downloaded at runtime, not vendored
+# (CC BY-NC-SA 3.0, Malo et al. 2014).
+#
+# NOTE: the canonical `takala/financial_phrasebank` still ships a loading
+# script, which `datasets` >= 4 refuses ("Dataset scripts are no longer
+# supported"). Mirrors that keep the per-agreement configs
+# (`sentences_75agree` etc.) are all script-based for the same reason.
+# `odedovadia/financial_phrasebank_split` is plain parquet, original Malo
+# tokenisation (matches the seeded eval text), int labels 0/1/2.
+source_dataset: odedovadia/financial_phrasebank_split
+source_config: default
 
 max_seq_len: 512
 

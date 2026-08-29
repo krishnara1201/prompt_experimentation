@@ -507,13 +507,16 @@ Everything is in `backend/training.yaml` (the training counterpart to
 ### Fallbacks
 
 - **HF subset**: `training.yaml` defaults to `source_dataset:
-  takala/financial_phrasebank` with `source_config: sentences_75agree`
-  (public parquet configs, no `trust_remote_code`). To loosen the
-  expert-agreement threshold, drop `source_config` to `sentences_66agree`
-  or `sentences_50agree` on the same repo. Switching to a *different*
-  mirror is a **two-line** edit (`source_dataset` **and** `source_config`)
-  because the config-name scheme differs between mirrors — e.g. the
-  `gtfintechlab` mirrors key configs by numeric string, not `sentences_*`.
+  odedovadia/financial_phrasebank_split`, `source_config: default` — the
+  full 4846-sentence 50%-agree corpus as plain parquet. The leakage guard
+  drops the ~2260 rows that overlap the all-agree eval set, leaving ~2580
+  lower-agreement sentences. `datasets` >= 4 refuses script-based datasets,
+  which rules out the canonical `takala/financial_phrasebank` and every
+  mirror that keeps the per-agreement configs (`sentences_75agree` etc.) —
+  they are all script-based. If you find a script-free parquet mirror with
+  a higher agreement threshold, it is a **two-line** edit (`source_dataset`
+  **and** `source_config`); `load_source_examples` just needs `sentence`
+  and `label` (int 0/1/2) columns.
 - **GGUF conversion** needs a llama.cpp build toolchain (cmake/gcc);
   Unsloth clones + builds it on first `pe finetune export`. If that fails,
   build llama.cpp manually and run `convert_hf_to_gguf.py` +
