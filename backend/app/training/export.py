@@ -73,40 +73,55 @@ def render_arm_snippet(cfg: TrainingConfig, base_url: str) -> str:
     )
 
 
-def export_arm(cfg: TrainingConfig, arms_path: Path | None = None) -> ExportResult:
-    import_unsloth()
-    from unsloth import FastLanguageModel
+def _find_gguf(out_dir: Path, quant: str) -> Path | None:
+    """Locate the quantised GGUF. Unsloth writes it under a sibling of the
+    directory it is handed (``gguf`` -> ``gguf_gguf``) and names it after the
+    base model, not the run, so search the whole artifact tree."""
+    token = quant.replace("_", "").lower()
+    matches = [
+        p for p in out_dir.glob("**/*.gguf")
+        if token in p.name.replace("_", "").lower()
+    ]
+    return sorted(matches, key=lambda p: p.stat().st_mtime, reverse=True)[0] if matches else None
 
+
+def export_arm(cfg: TrainingConfig, arms_path: Path | None = None) -> ExportResult:
     out_dir = Path(cfg.output_dir)
     adapter_path = out_dir / "adapter"
     if not adapter_path.exists():
         raise ExportError(f"no trained adapter at {adapter_path} -- run `pe finetune train` first")
 
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=str(adapter_path),
-        max_seq_length=cfg.max_seq_len,
-        load_in_4bit=False,
-        dtype=None,
-    )
+    gguf_path = _find_gguf(out_dir, cfg.gguf_quant)
+    if gguf_path is None:
+        import_unsloth()
+        from unsloth import FastLanguageModel
 
-    # Save the merged 16-bit HF model first: it is the documented
-    # manual-recovery path (backend/README.md 'Fallbacks' ->
-    # training/artifacts/<run_name>/merged/) if the GGUF toolchain step fails.
-    model.save_pretrained_merged(
-        str(out_dir / "merged"), tokenizer, save_method="merged_16bit"
-    )
+        # Load 4-bit: an 8B model in fp16 does not fit a 12 GB card, and the
+        # resulting accelerate CPU/disk offload trips a KeyError in peft's
+        # _update_offload. Unsloth's save_pretrained_merged / _gguf dequantize
+        # the 4-bit base back to 16-bit for the merge, so this is lossless for
+        # the merged output.
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=str(adapter_path),
+            max_seq_length=cfg.max_seq_len,
+            load_in_4bit=True,
+            dtype=None,
+        )
 
-    gguf_dir = out_dir / "gguf"
-    gguf_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained_gguf(
-        str(gguf_dir), tokenizer, quantization_method=cfg.gguf_quant
-    )
-    gguf_files = sorted(gguf_dir.glob("*.gguf"))
-    if not gguf_files:
-        raise ExportError(f"GGUF conversion produced no .gguf file in {gguf_dir}")
-    gguf_path = gguf_files[0]
+        # Save the merged 16-bit HF model first: it is the documented
+        # manual-recovery path (backend/README.md 'Fallbacks' ->
+        # training/artifacts/<run_name>/merged/) if the GGUF toolchain step fails.
+        model.save_pretrained_merged(
+            str(out_dir / "merged"), tokenizer, save_method="merged_16bit"
+        )
+        model.save_pretrained_gguf(
+            str(out_dir / "gguf"), tokenizer, quantization_method=cfg.gguf_quant
+        )
+        gguf_path = _find_gguf(out_dir, cfg.gguf_quant)
+        if gguf_path is None:
+            raise ExportError(f"GGUF conversion produced no {cfg.gguf_quant} .gguf under {out_dir}")
 
-    modelfile_path = gguf_dir / "Modelfile"
+    modelfile_path = gguf_path.parent / "Modelfile.pe"
     modelfile_path.write_text(build_modelfile(cfg, gguf_path.name), encoding="utf-8")
 
     proc = subprocess.run(
