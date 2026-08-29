@@ -1,0 +1,44 @@
+# The single config surface for Phase 7 fine-tuning (mirrors arms.yaml).
+# `pe finetune prep|train|export` all read this file.
+
+run_name: qwen3-8b-finsent-lora
+
+# HF weights to fine-tune (full/4bit, NOT the Ollama GGUF).
+base_model: unsloth/Qwen3-8B
+
+# Financial PhraseBank lower-agreement subset -- disjoint from the
+# all-agree eval set after the leakage guard drops the overlap.
+# Downloaded at runtime, not vendored (CC BY-NC-SA 3.0, Malo et al. 2014).
+source_dataset: gtfintechlab/financial_phrasebank_sentences_75agree
+source_config: "5768"
+
+max_seq_len: 512
+
+lora_r: 16
+lora_alpha: 16
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+epochs: 3
+learning_rate: 0.0002
+batch_size: 8
+grad_accum: 2
+seed: 42
+
+val_fraction: 0.1
+balance_neutral: false
+min_pool_size: 500
+
+# q4_k_m matches the base local arm's quantization for a clean
+# base-vs-fine-tuned comparison (see the spec's Risk 5).
+gguf_quant: q4_k_m
+ollama_tag: ft-qwen3-8b
+
+output_dir: training/artifacts/qwen3-8b-finsent-lora
