@@ -165,8 +165,19 @@ a local model and hosted API models.
    as a smoke test. Spec:
    `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`
    (see the 2026-08-29 post-implementation amendment).
-7. **Stretch** — LoRA fine-tune the local model on a subset of the task;
-   compare fine-tuned local vs. base local vs. API arms.
+7. **Local fine-tune** 🚧 **Capability built; comparison run pending a GPU
+   session.** `backend/app/training/` — QLoRA fine-tune of Qwen3-8B on the
+   Financial PhraseBank *lower-agreement* subset (disjoint from the
+   all-agree eval set, enforced by a leakage guard in
+   `training/dataset.py`), then merge → GGUF → `ollama create` so the
+   fine-tuned model is just another `openai_compatible` arm. Driven by
+   `pe finetune prep|train|export|report` over `backend/training.yaml`.
+   Training deps are an optional `training` extra, out of the core/CI
+   path. Spec:
+   `docs/superpowers/specs/2026-08-29-local-finetune-phase7-design.md`;
+   plan: `docs/superpowers/plans/2026-08-29-local-finetune-phase7.md`.
+   The executed fine-tuned-vs-base-vs-API comparison lands at
+   `docs/superpowers/reports/2026-08-29-finetune-comparison.md`.
 
 ## Open decisions
 

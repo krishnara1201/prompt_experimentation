@@ -453,6 +453,74 @@ or the adapters.
   tool error — no retries; the calling agent decides whether to retry or
   rephrase.
 
+## Phase 7: local fine-tune
+
+QLoRA fine-tune of the local model on the financial-sentiment task, served
+through Ollama as a normal `openai_compatible` arm.
+
+### Prerequisites
+
+- A CUDA GPU (developed on a 12 GB RTX 4070).
+- `uv sync --extra training` — pulls `unsloth`, `trl`, `peft`,
+  `transformers`, `datasets`, `bitsandbytes`, `torch`, `matplotlib`. NOT
+  installed by a plain `uv sync` and NOT needed by the API/worker/CI.
+- Ollama running (same as the base local arm).
+- The stack up (`pe up`) and eval examples seeded — the dataset builder
+  reads `eval_example` to guarantee the training data is disjoint from it.
+
+Record the resolved dependency versions here after a successful run:
+_(unsloth ==, torch ==, transformers ==, trl ==, bitsandbytes ==)_
+
+### Workflow
+
+```bash
+cd backend
+# 1. Build + leakage-check the training data (Financial PhraseBank
+#    lower-agreement subset; downloaded at runtime, not vendored).
+pe finetune prep
+
+# 2. Fine-tune (writes training/artifacts/<run_name>/adapter/). ~20-40 min.
+pe finetune train            # --dry-run does dataset + config only, no GPU
+
+# 3. Merge -> GGUF -> `ollama create ft-qwen3-8b`; prints an arms.yaml entry.
+pe finetune export
+
+# 4. Paste the printed snippet into arms.yaml under `arms:`.
+
+# 5. Run the comparison over base local, fine-tuned local, and the API arms.
+pe run --arm qwen3-8b-local --arm ft-qwen3-8b-local \
+       --arm gpt-4o-mini --arm claude-haiku --repeats 5 --sample 200
+
+# 6. After the run + judge scoring finish, render the report.
+pe finetune report --run-id <id> \
+    --baseline qwen3-8b-local \
+    --candidate ft-qwen3-8b-local --candidate gpt-4o-mini --candidate claude-haiku \
+    --train-seconds <wall-seconds-from-step-2> --gpu-cost-per-hour <your-rate>
+```
+
+### Config
+
+Everything is in `backend/training.yaml` (the training counterpart to
+`arms.yaml`): base model, HF source subset, LoRA rank/alpha, epochs, LR,
+`gguf_quant` (default `q4_k_m`, matching the base local arm), `ollama_tag`.
+
+### Fallbacks
+
+- **HF subset**: `training.yaml`'s `source_dataset` defaults to a
+  `sentences_75agree` mirror. If it 404s or needs `trust_remote_code`,
+  switch to `sentences_66agree`, `sentences_50agree`, or the canonical
+  `takala/financial_phrasebank` — a one-line config edit.
+- **GGUF conversion** needs a llama.cpp build toolchain (cmake/gcc);
+  Unsloth clones + builds it on first `pe finetune export`. If that fails,
+  build llama.cpp manually and run `convert_hf_to_gguf.py` +
+  `llama-quantize` against `training/artifacts/<run_name>/merged/`.
+- **Out of VRAM**: lower `max_seq_len`, set `batch_size: 1`, raise
+  `grad_accum` in `training.yaml`.
+- **Model echoes the prompt instead of a label**: the completion-only loss
+  markers in `app/training/train.py` (`instruction_part` /
+  `response_part`) don't match the installed Unsloth's Qwen3 chat
+  template — check `tokenizer.apply_chat_template` output and adjust.
+
 ## Tests
 
 ```bash
