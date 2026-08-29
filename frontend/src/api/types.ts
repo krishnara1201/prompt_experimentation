@@ -1,3 +1,22 @@
+export interface ArmInfo {
+  name: string;
+  adapter: string;
+  model: string | null;
+}
+
+export interface RunCreateRequest {
+  arms?: string[];
+  sample_size?: number;
+  repeats?: number;
+  seed?: number;
+}
+
+export interface RunCreateResponse {
+  run_id: number;
+  status: string;
+  total_calls: number;
+}
+
 export interface RunSummary {
   run_id: number;
   created_at: string;
