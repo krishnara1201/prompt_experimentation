@@ -225,23 +225,38 @@ project-scoped-server prompt the first time). Check it loaded with
 `/mcp`; the tool appears as
 `mcp__financial-sentiment-judge__score_financial_sentiment`.
 
+For **Codex CLI**, the repo-root `.mcp.json` is not picked up (that's a
+Claude Code convention) — register the server in `~/.codex/config.toml`
+with an **absolute** path to `backend`:
+
+```toml
+[mcp_servers.financial-sentiment-judge]
+command = "uv"
+args = ["run", "--directory", "/abs/path/to/prompt_experimentation/backend", "python", "-m", "app.mcp_judge_server"]
+```
+
+Codex launches the server from its own working directory, so the relative
+`--directory backend` that works for Claude Code must be made absolute here.
+
 For **any other MCP client**, run the server over stdio:
 
 ```bash
 uv run --directory backend python -m app.mcp_judge_server
 ```
 
-and point the client's own MCP config at that command. Note the
-`--directory backend` in `.mcp.json` is resolved relative to the client's
-working directory; a client that starts outside the repo root should use an
-absolute path instead.
+and point the client's own MCP config at that command, again using an
+absolute path if the client starts outside the repo root.
 
 **Prerequisite — the judge model must be reachable.** The server shells out
-to whatever `arms.yaml`'s `judge:` block names (see step 3). The default
-`adapter: claude_code_cli` needs an authenticated `claude` CLI on `PATH`
-(`claude login`); an `openai_compatible` / `anthropic` judge needs its API
-key in `backend/.env`. A misconfigured judge comes back as a tool error to
-the caller, not a server crash.
+to whatever `arms.yaml`'s `judge:` block names (see step 3), regardless of
+which client called the tool. The default `adapter: claude_code_cli` needs
+an authenticated `claude` CLI on `PATH` (`claude login`); an
+`openai_compatible` / `anthropic` judge needs its API key in `backend/.env`.
+Calling the tool from a Codex session does **not** provide a `claude` CLI —
+if you don't have one, switch the judge to `openai_compatible` +
+`OPENAI_API_KEY`, the `codex_cli` adapter, or local Ollama (step 3). A
+misconfigured judge comes back as a tool error to the caller, not a server
+crash.
 
 ### 2. Call the tool
 
