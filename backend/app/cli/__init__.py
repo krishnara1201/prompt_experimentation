@@ -281,17 +281,26 @@ def finetune_report(
     candidate: list[str] = typer.Option(
         ..., "--candidate", help="Arm to compare against the baseline (repeatable)."
     ),
+    finetuned: str = typer.Option(
+        "ft-qwen3-8b-local", "--finetuned",
+        help="Name of the fine-tuned local arm (the local side of the equivalence test).",
+    ),
     epsilon: float = typer.Option(0.5, "--epsilon", help="Equivalence margin on the 1-5 judge scale."),
     gpu_cost_per_hour: float = typer.Option(0.40, "--gpu-cost-per-hour"),
     train_seconds: float = typer.Option(0.0, "--train-seconds", help="Wall time of `pe finetune train`."),
+    force: bool = typer.Option(
+        False, "--force", help="Render even if the run has not reached a terminal state."
+    ),
     out: str = typer.Option(
         "../docs/superpowers/reports/2026-08-29-finetune-comparison.md", "--out"
     ),
 ):
     """Render the fine-tuned-vs-base-vs-API comparison report from a completed run."""
-    args = ["--run-id", str(run_id), "--baseline", baseline,
+    args = ["--run-id", str(run_id), "--baseline", baseline, "--finetuned", finetuned,
             "--epsilon", str(epsilon), "--gpu-cost-per-hour", str(gpu_cost_per_hour),
             "--train-seconds", str(train_seconds), "--out", out]
+    if force:
+        args.append("--force")
     for c in candidate:
         args += ["--candidate", c]
     backend_script("scripts.finetune_report", *args)

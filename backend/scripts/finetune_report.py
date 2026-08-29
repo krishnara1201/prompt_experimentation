@@ -5,7 +5,7 @@ http://localhost:8000). Run from inside backend/:
     uv run python -m scripts.finetune_report --run-id 5 \
         --baseline qwen3-8b-local \
         --candidate ft-qwen3-8b-local --candidate gpt-4o-mini \
-        --train-seconds 4500
+        --finetuned ft-qwen3-8b-local --train-seconds 4500
 """
 import argparse
 import os
@@ -17,13 +17,19 @@ import httpx
 BASE_URL = os.environ.get("PE_API_URL", "http://localhost:8000").rstrip("/")
 FRONTIER_PNG = "2026-08-29-finetune-frontier.png"
 
+# Mirrors app/cli/__init__.py:_TERMINAL -- the stats endpoints only mean
+# something once a run has stopped moving.
+_TERMINAL = {"completed", "completed_with_errors"}
+
 
 @dataclass
 class ReportContext:
     run_id: int
-    run_meta: dict
+    status: str
+    arm_names: list[str]
     baseline: str
     candidates: list[str]
+    finetuned: str
     epsilon: float
     summary: list[dict]
     comparisons: list[dict]
@@ -31,6 +37,7 @@ class ReportContext:
     training_cost: float
     gpu_cost_per_hour: float
     train_seconds: float
+    frontier_png: str | None
 
 
 def training_cost_usd(train_seconds: float, gpu_cost_per_hour: float) -> float:
@@ -44,10 +51,20 @@ def break_even_calls(training_cost: float, api_cost_per_call: float) -> float | 
 
 
 def _get(path: str, **params) -> object:
-    resp = httpx.get(f"{BASE_URL}{path}", params={k: v for k, v in params.items() if v is not None},
-                     timeout=30.0)
+    resp = httpx.get(
+        f"{BASE_URL}{path}",
+        params={k: v for k, v in params.items() if v is not None},
+        timeout=30.0,
+    )
     resp.raise_for_status()
     return resp.json()
+
+
+def _detail(resp: httpx.Response) -> str:
+    try:
+        return str(resp.json().get("detail", resp.text))
+    except ValueError:
+        return resp.text
 
 
 def _fmt(x) -> str:
@@ -58,20 +75,17 @@ def _fmt(x) -> str:
     return str(x)
 
 
-def _summary_row(summary: list[dict], arm: str) -> dict:
-    for row in summary:
-        if row["arm_name"] == arm:
-            return row
-    raise SystemExit(f"arm '{arm}' not in run summary")
+def _summary_row(summary: list[dict], arm: str) -> dict | None:
+    return next((row for row in summary if row["arm_name"] == arm), None)
 
 
 def build_report_markdown(ctx: ReportContext) -> str:
-    m = ctx.run_meta
     lines: list[str] = []
     lines.append("# Fine-tuned vs. base vs. API — financial sentiment (Phase 7)\n")
     lines.append(
-        f"Run **{ctx.run_id}** — arms `{', '.join(m['arm_names'])}`, "
-        f"{m.get('repeats')} repeats × {m.get('sample_size')} examples, seed {m.get('seed')}. "
+        f"Run **{ctx.run_id}** (`{ctx.status}`) — arms `{', '.join(ctx.arm_names)}`. "
+        "N per arm is the **n** column in the frontier table below; the run's "
+        "`repeats` / `sample_size` / `seed` are not exposed by the API. "
         "Quality metric is the calibrated LLM judge's 1–5 `judge_score`.\n"
     )
     lines.append(
@@ -91,23 +105,26 @@ def build_report_markdown(ctx: ReportContext) -> str:
     lines.append("")
 
     lines.append("## Bayesian equivalence\n")
-    lines.append(f"P(judge_score_candidate ≥ judge_score_api − ε), ε = {ctx.epsilon}:\n")
+    lines.append(
+        f"P(judge_score[fine-tuned local] ≥ judge_score[API] − ε), ε = {ctx.epsilon}:\n"
+    )
     if ctx.equivalences:
-        lines.append("| candidate | vs. API arm | P(equivalent) |")
+        lines.append("| fine-tuned local | vs. API arm | P(equivalent) |")
         lines.append("|---|---|---|")
         for e in ctx.equivalences:
             lines.append(f"| {e['arm_local']} | {e['arm_api']} | {_fmt(e['p_equivalent'])} |")
     else:
-        lines.append("_No API candidates supplied._")
+        lines.append("_No API candidate with per-call cost, or equivalence was skipped for lack of data._")
     lines.append("")
 
     lines.append("## Cost / latency / quality frontier\n")
-    lines.append(f"![frontier]({FRONTIER_PNG})\n")
-    lines.append("| arm | mean judge_score | mean latency (ms) | mean $/call |")
-    lines.append("|---|---|---|---|")
+    if ctx.frontier_png:
+        lines.append(f"![frontier]({ctx.frontier_png})\n")
+    lines.append("| arm | n | mean judge_score | mean latency (ms) | mean $/call |")
+    lines.append("|---|---|---|---|---|")
     for row in ctx.summary:
         lines.append(
-            f"| {row['arm_name']} | {_fmt(row.get('mean_judge_score'))} | "
+            f"| {row['arm_name']} | {_fmt(row.get('n'))} | {_fmt(row.get('mean_judge_score'))} | "
             f"{_fmt(row.get('mean_latency_ms'))} | {_fmt(row.get('mean_cost_estimate_usd'))} |"
         )
     lines.append("")
@@ -121,7 +138,7 @@ def build_report_markdown(ctx: ReportContext) -> str:
         "`cost_estimate_usd` stays null (subscription/again-local compute).\n"
     )
     for c in ctx.candidates:
-        row = _summary_row(ctx.summary, c) if any(r["arm_name"] == c for r in ctx.summary) else None
+        row = _summary_row(ctx.summary, c)
         api_cost = row.get("mean_cost_estimate_usd") if row else None
         be = break_even_calls(ctx.training_cost, api_cost) if api_cost else None
         if be is not None:
@@ -145,15 +162,25 @@ def write_frontier_png(summary: list[dict], out_path: Path) -> bool:
         import matplotlib.pyplot as plt
     except ImportError:
         return False
+    max_cost = max((row.get("mean_cost_estimate_usd") or 0.0 for row in summary), default=0.0)
     fig, ax = plt.subplots(figsize=(6, 4))
     for row in summary:
         x = row.get("mean_latency_ms") or 0
         y = row.get("mean_judge_score") or 0
-        ax.scatter(x, y)
-        ax.annotate(row["arm_name"], (x, y), fontsize=8, xytext=(4, 4), textcoords="offset points")
+        cost = row.get("mean_cost_estimate_usd")
+        # Marker area encodes per-call cost; null-cost (local) arms get a
+        # small fixed marker (spec §7: "marker size/label = cost").
+        if cost and max_cost:
+            size = 40.0 + 360.0 * (cost / max_cost)
+            label = f"{row['arm_name']} (${cost:.5f}/call)"
+        else:
+            size = 40.0
+            label = f"{row['arm_name']} ($0/call)"
+        ax.scatter(x, y, s=size)
+        ax.annotate(label, (x, y), fontsize=8, xytext=(4, 4), textcoords="offset points")
     ax.set_xlabel("mean latency (ms)")
     ax.set_ylabel("mean judge_score (1–5)")
-    ax.set_title("Cost / latency / quality frontier")
+    ax.set_title("Cost / latency / quality frontier (marker size = $/call)")
     fig.tight_layout()
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
@@ -165,46 +192,84 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--run-id", type=int, required=True)
     parser.add_argument("--baseline", required=True)
     parser.add_argument("--candidate", action="append", required=True, dest="candidates")
+    parser.add_argument(
+        "--finetuned",
+        default="ft-qwen3-8b-local",
+        help="Name of the fine-tuned local arm (the arm_local side of the equivalence test).",
+    )
     parser.add_argument("--epsilon", type=float, default=0.5)
     parser.add_argument("--gpu-cost-per-hour", type=float, default=0.40)
     parser.add_argument("--train-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Render the report even if the run has not reached a terminal state.",
+    )
     parser.add_argument("--out", default="../docs/superpowers/reports/2026-08-29-finetune-comparison.md")
     args = parser.parse_args(argv)
 
-    run_meta = _get(f"/runs/{args.run_id}")
+    status_meta = _get(f"/runs/{args.run_id}")
+    status = str(status_meta.get("status", "unknown"))
+    if status not in _TERMINAL and not args.force:
+        raise SystemExit(
+            f"run {args.run_id} is '{status}', not a terminal state "
+            f"({', '.join(sorted(_TERMINAL))}) -- pass --force to report anyway"
+        )
+
     summary = _get(f"/runs/{args.run_id}/summary")
-    comparisons = _get(f"/runs/{args.run_id}/compare")
+    if not summary:
+        raise SystemExit(f"run {args.run_id} has no per-arm summary rows yet")
+    arm_names = [row["arm_name"] for row in summary]
+    if args.baseline not in arm_names:
+        raise SystemExit(
+            f"baseline arm '{args.baseline}' is not in run {args.run_id} (arms: {', '.join(arm_names)})"
+        )
+
+    comparisons = _get(f"/runs/{args.run_id}/compare", metric="judge_score")
     kept = [c for c in comparisons
             if {c["arm_a"], c["arm_b"]} <= ({args.baseline, *args.candidates})
             and args.baseline in (c["arm_a"], c["arm_b"])]
 
-    equivalences = []
-    for c in args.candidates:
-        if c == args.baseline:
-            continue
-        row = next((r for r in summary if r["arm_name"] == c), None)
-        is_api = bool(row and row.get("mean_cost_estimate_usd"))
-        if not is_api:
-            continue
-        try:
-            equivalences.append(_get(
-                f"/runs/{args.run_id}/equivalence", arm_local="ft-qwen3-8b-local", arm_api=c,
-                epsilon=args.epsilon,
-            ))
-        except httpx.HTTPStatusError:
-            pass
+    equivalences: list[dict] = []
+    if args.finetuned not in arm_names:
+        print(f"skipped equivalence: fine-tuned arm '{args.finetuned}' is not in run {args.run_id}")
+    else:
+        for c in args.candidates:
+            if c in (args.baseline, args.finetuned):
+                continue
+            row = _summary_row(summary, c)
+            is_api = bool(row and row.get("mean_cost_estimate_usd"))
+            if not is_api:
+                continue
+            try:
+                equivalences.append(_get(
+                    f"/runs/{args.run_id}/equivalence",
+                    metric="judge_score", arm_local=args.finetuned, arm_api=c,
+                    epsilon=args.epsilon,
+                ))
+            except httpx.HTTPStatusError as exc:
+                # 422 from this endpoint means "not enough paired data" (or a
+                # bad metric/arm, which we control) -- skip that candidate and
+                # say why. Anything else is a real failure; let it propagate.
+                if exc.response.status_code == 422:
+                    print(f"skipped equivalence for {c}: {_detail(exc.response)}")
+                    continue
+                raise
 
     training_cost = training_cost_usd(args.train_seconds, args.gpu_cost_per_hour)
-    ctx = ReportContext(
-        run_id=args.run_id, run_meta=run_meta, baseline=args.baseline,
-        candidates=args.candidates, epsilon=args.epsilon, summary=summary,
-        comparisons=kept, equivalences=equivalences, training_cost=training_cost,
-        gpu_cost_per_hour=args.gpu_cost_per_hour, train_seconds=args.train_seconds,
-    )
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(build_report_markdown(ctx), encoding="utf-8")
     png_ok = write_frontier_png(summary, out_path.parent / FRONTIER_PNG)
+
+    ctx = ReportContext(
+        run_id=args.run_id, status=status, arm_names=arm_names,
+        baseline=args.baseline, candidates=args.candidates, finetuned=args.finetuned,
+        epsilon=args.epsilon, summary=summary, comparisons=kept,
+        equivalences=equivalences, training_cost=training_cost,
+        gpu_cost_per_hour=args.gpu_cost_per_hour, train_seconds=args.train_seconds,
+        frontier_png=FRONTIER_PNG if png_ok else None,
+    )
+    out_path.write_text(build_report_markdown(ctx), encoding="utf-8")
     print(f"wrote {out_path}")
     print(f"frontier png: {'written' if png_ok else 'skipped (matplotlib not installed)'}")
 

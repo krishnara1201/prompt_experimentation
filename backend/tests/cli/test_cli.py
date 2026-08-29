@@ -193,3 +193,18 @@ def test_finetune_report_passes_args(captured_argv):
     assert argv[:6] == ["uv", "run", "python", "-m", "scripts.finetune_report", "--run-id"]
     assert "--baseline" in argv and "qwen3-8b-local" in argv
     assert argv.count("--candidate") == 2
+    # --finetuned defaults through; --force only when asked
+    assert argv[argv.index("--finetuned") + 1] == "ft-qwen3-8b-local"
+    assert "--force" not in argv
+
+
+def test_finetune_report_passes_finetuned_and_force(captured_argv):
+    result = runner.invoke(
+        app,
+        ["finetune", "report", "--run-id", "5", "--baseline", "b",
+         "--candidate", "c", "--finetuned", "my-ft-arm", "--force"],
+    )
+    assert result.exit_code == 0
+    argv = captured_argv[-1]
+    assert argv[argv.index("--finetuned") + 1] == "my-ft-arm"
+    assert "--force" in argv
