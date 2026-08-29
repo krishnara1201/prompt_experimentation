@@ -151,7 +151,9 @@ a local model and hosted API models.
    repo-root `.mcp.json`. The tool response also carries `judge_model` (call
    provenance, since the `judge:` config reloads per call), and rejects
    blank `input_text`/`model_output` or an out-of-domain `gold_label` before
-   making a judge call. Spec:
+   making a judge call. `backend/scripts/judge_tool_dryrun.py` exercises the
+   whole path (real MCP stdio transport, real dataset rows, real arm output)
+   as a smoke test. Spec:
    `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`
    (see the 2026-08-29 post-implementation amendment).
 7. **Stretch** — LoRA fine-tune the local model on a subset of the task;
