@@ -31,7 +31,11 @@ running a full eval (seed examples, Celery orchestration, `RunResult` rows).
 ```
 
 A new module, `backend/app/mcp_judge_server.py`, wraps `score_output` as a
-single MCP tool served over stdio using the `mcp` Python SDK's `FastMCP`.
+single MCP tool served over stdio using the `mcp` Python SDK's
+`MCPServer` (`mcp.server.mcpserver.MCPServer` — the current SDK's
+tool-server class; `FastMCP` was the pre-2.0 name, and `mcp.server.fastmcp`
+deliberately raises `ModuleNotFoundError` in `mcp>=2` pointing at this
+rename — verified against the installed `mcp==2.1.1` package source).
 No new judging logic is introduced — this is glue over the existing pure
 function, not a new scoring path. It is deliberately **not** a FastAPI
 endpoint, a CLI script, or a DB-backed feature; see "Rejected alternatives"
@@ -75,6 +79,19 @@ config itself might be what's being tuned.
 ### Module structure and testability
 
 ```python
+from pathlib import Path
+
+from mcp.server.mcpserver import MCPServer
+
+from app.adapters.base import ModelAdapter
+from app.config.arms import load_judge_arm
+from app.judge.scorer import score_output
+
+ARMS_PATH = Path(__file__).resolve().parent.parent / "arms.yaml"
+
+mcp = MCPServer("financial-sentiment-judge")
+
+
 def _score_financial_sentiment(
     input_text: str,
     gold_label: str,
@@ -92,13 +109,28 @@ def score_financial_sentiment(input_text: str, gold_label: str, model_output: st
     """Score a candidate financial-sentiment response (1-5) against a gold
     label, using this platform's calibrated rubric judge."""
     return _score_financial_sentiment(input_text, gold_label, model_output)
+
+
+def main() -> None:
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()
 ```
+
+`mcp = MCPServer("financial-sentiment-judge")` is a module-level instance;
+`@mcp.tool()` registers `score_financial_sentiment` as a side effect and
+returns the function unchanged (confirmed in the SDK source — the
+decorator calls `self.add_tool(fn, ...)` then `return fn`), so it remains
+directly callable as a plain function, including from tests. `mcp.run()`
+defaults to `transport="stdio"`.
 
 The private `_score_financial_sentiment` takes an optional `adapter` so
 tests can inject a fake adapter directly (same fake-adapter pattern already
 used in `tests/judge/test_scorer.py`), without needing a real `arms.yaml`
 judge config or a real model call. The public, MCP-decorated function has
-no test-only parameters — it's the thin entry point `FastMCP` registers.
+no test-only parameters — it's the thin entry point `MCPServer` registers.
 
 ### Distribution / discovery
 
@@ -121,7 +153,7 @@ standard project-scoped-server approval prompt) use the tool with no manual
 
 ### Dependency
 
-Adds `mcp` (the official MCP Python SDK, providing `FastMCP`) to
+Adds `mcp>=2.1.1` (the official MCP Python SDK, providing `MCPServer`) to
 `backend/pyproject.toml`'s `dependencies`.
 
 ## Error handling
@@ -131,10 +163,12 @@ this is a single-shot interactive call with no run/DB state to keep
 consistent across attempts. `JudgeParseError` (malformed rubric output) or
 any adapter exception (network error, missing API key, etc.) propagates
 out of `_score_financial_sentiment`/`score_financial_sentiment` uncaught.
-`FastMCP` converts an uncaught exception into a tool-call error surfaced
-directly to the calling agent, which can decide whether to retry, rephrase,
-or give up — the same judgment call a human would make, just left to the
-agent instead of hidden behind automatic retries.
+`MCPServer`'s `_handle_call_tool` catches any exception raised by a tool
+function and returns it as a `CallToolResult(is_error=True)` (confirmed in
+the SDK source — it never lets a tool exception crash the server process),
+surfacing the error directly to the calling agent, which can decide whether
+to retry, rephrase, or give up — the same judgment call a human would make,
+just left to the agent instead of hidden behind automatic retries.
 
 ## Testing
 
@@ -149,7 +183,7 @@ New file `backend/tests/test_mcp_judge_server.py`:
   with `ARMS_PATH` (verifies the config-loading wiring, e.g. via monkeypatch
   on `load_judge_arm`).
 
-No test drives the actual MCP/stdio protocol layer — `FastMCP`'s tool
+No test drives the actual MCP/stdio protocol layer — `MCPServer`'s tool
 registration and transport are the SDK's responsibility, not this project's;
 testing stops at the plain-Python function boundary.
 
