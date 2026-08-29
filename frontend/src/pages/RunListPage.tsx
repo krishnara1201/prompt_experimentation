@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchRuns } from '../api/client';
+import { NewRunForm } from '../components/NewRunForm';
 import { QueryState } from '../components/QueryState';
 import { StatusBadge } from '../components/StatusBadge';
 import type { RunSummary } from '../api/types';
@@ -22,9 +23,10 @@ export function RunListPage() {
   return (
     <div className="p-6">
       <h1 className="mb-4 text-xl font-semibold">Runs</h1>
+      <NewRunForm />
       <QueryState isLoading={isLoading} error={error} onRetry={refetch}>
         {data && data.length === 0 && (
-          <p className="text-sm text-gray-500">No runs yet — create one with POST /runs.</p>
+          <p className="text-sm text-gray-500">No runs yet — start one with the “New run” button.</p>
         )}
         {data && data.length > 0 && (
           <table className="w-full text-left text-sm">

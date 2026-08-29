@@ -156,6 +156,31 @@ curl localhost:8000/runs/1
 curl 'localhost:8000/runs/1/results?limit=50'
 ```
 
+`GET /arms` lists the arms configured in `arms.yaml` (name / adapter type /
+model) — used by the `pe` CLI and the dashboard's New Run form.
+
+### The `pe` CLI
+
+`pe` (console entrypoint, `uv run pe …` from `backend/`) wraps all of the
+above plus the stack lifecycle and the calibration workflow. The raw
+`curl` / `python -m scripts.*` commands still work — `pe` is the friendlier
+path.
+
+| Command | What it does |
+| --- | --- |
+| `pe up [--no-wait]` / `pe down [-v]` / `pe logs [svc] [-f]` | `docker compose` lifecycle |
+| `pe seed` | seed the eval dataset via a one-off `migrate` container |
+| `pe arms` | list configured arms |
+| `pe run [--sample N] [--repeats N] [--seed N] [--arm A ...] [-q]` | `POST /runs`; `-q` prints only the run id |
+| `pe status RUN_ID` / `pe watch RUN_ID` / `pe results RUN_ID` | run status, poll-to-done, per-call rows |
+| `pe stats compare RUN_ID [-m METRIC]` | pairwise paired comparison |
+| `pe stats equivalence RUN_ID --local A --api B [--eps E]` | Bayesian equivalence (judge_score) |
+| `pe stats power RUN_ID --arm-a A --arm-b B` | required sample size for the observed effect |
+| `pe calibrate select \| import \| report …` | the Phase 3 calibration scripts (run on the host — need a local `.env` with a `localhost` `DATABASE_URL`) |
+
+`PE_API_URL` overrides the API base (default `http://localhost:8000`).
+`uv run pe --help` documents every command.
+
 ## Phase 3: Judge layer + calibration
 
 Every successfully completed `RunResult` is automatically scored 1-5 by a
