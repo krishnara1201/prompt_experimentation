@@ -13,7 +13,8 @@ FIXTURE = Path(__file__).resolve().parent.parent / "data" / "fixtures" / "arms_s
 def test_build_modelfile_disables_thinking_and_pins_params():
     text = export.build_modelfile(CFG, "qwen3-8b-finsent-lora.Q4_K_M.gguf")
     assert "FROM ./qwen3-8b-finsent-lora.Q4_K_M.gguf" in text
-    assert f"num_ctx {CFG.max_seq_len}" in text
+    # num_ctx must leave completion headroom over the training seq len.
+    assert f"num_ctx {CFG.max_seq_len + 1024}" in text
     assert "temperature 0" in text
     assert "/no_think" in text  # thinking disabled for classification
 

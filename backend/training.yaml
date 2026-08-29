@@ -9,8 +9,10 @@ base_model: unsloth/Qwen3-8B
 # Financial PhraseBank lower-agreement subset -- disjoint from the
 # all-agree eval set after the leakage guard drops the overlap.
 # Downloaded at runtime, not vendored (CC BY-NC-SA 3.0, Malo et al. 2014).
-source_dataset: gtfintechlab/financial_phrasebank_sentences_75agree
-source_config: "5768"
+# takala/financial_phrasebank is public with parquet configs
+# (sentences_50agree / 66agree / 75agree / allagree) -- no trust_remote_code.
+source_dataset: takala/financial_phrasebank
+source_config: sentences_75agree
 
 max_seq_len: 512
 

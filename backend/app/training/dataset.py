@@ -10,6 +10,7 @@ import asyncio
 import json
 import random
 import re
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +54,10 @@ class DatasetBuildResult:
 
 
 def normalize_sentence(s: str) -> str:
-    return _WS.sub(" ", s).strip().casefold()
+    # NFKC first: the eval set is seeded from a vendored UTF-8 file while the
+    # training rows come from a different HF mirror, so quote-style / ligature
+    # / full-width divergence would silently defeat the leakage intersection.
+    return _WS.sub(" ", unicodedata.normalize("NFKC", s)).strip().casefold()
 
 
 def load_source_examples(cfg: TrainingConfig) -> list[tuple[str, str]]:
@@ -98,9 +102,9 @@ def _balance_neutral(rows: list[tuple[str, str]], seed: int) -> list[tuple[str, 
     if len(neutral) > minority:
         rng = random.Random(seed)
         by_label["neutral"] = rng.sample(neutral, minority)
-    out = [row for rows_ in by_label.values() for row in rows_]
-    random.Random(seed).shuffle(out)
-    return out
+    # No shuffle here -- build_sft_dataset reshuffles the pool with the same
+    # seed right after this returns.
+    return [row for rows_ in by_label.values() for row in rows_]
 
 
 def _write_jsonl(path: Path, rows: list[tuple[str, str]]) -> None:
@@ -133,14 +137,32 @@ def build_sft_dataset(cfg: TrainingConfig) -> DatasetBuildResult:
         raise LeakageError(
             f"{len(still_overlapping)} training sentences still overlap the eval set after dropping"
         )
-    if len(kept) < cfg.min_pool_size:
+    # Fail CLOSED when the intersection can't have run: an empty eval table or
+    # zero drops both produce a training set that may CONTAIN the eval set.
+    if not eval_norm:
         raise LeakageError(
-            f"training pool is {len(kept)} rows after leakage drop, below min_pool_size "
-            f"({cfg.min_pool_size}) -- wrong subset or normalization?"
+            "eval_example is empty -- seed the eval set (uv run python -m scripts.seed_eval_examples) "
+            "before building training data"
+        )
+    if dropped == 0:
+        raise LeakageError(
+            "0 eval-set rows overlapped the training pool -- since the all-agree eval set is a "
+            "subset of the configured lower-agreement subset, 0 drops means a source-config or "
+            "text-normalization mismatch between the two corpora, not a clean split"
         )
 
     if cfg.balance_neutral:
         kept = _balance_neutral(kept, cfg.seed)
+
+    # min_pool_size is checked AFTER balancing -- balancing shrinks the pool,
+    # so a pre-balance check could pass while the returned pool_size is below
+    # the floor.
+    if len(kept) < cfg.min_pool_size:
+        stage = "after neutral balancing" if cfg.balance_neutral else "after leakage drop"
+        raise LeakageError(
+            f"training pool is {len(kept)} rows {stage}, below min_pool_size "
+            f"({cfg.min_pool_size}) -- wrong subset or normalization?"
+        )
 
     rng = random.Random(cfg.seed)
     rng.shuffle(kept)

@@ -9,7 +9,9 @@ from pathlib import Path
 import yaml
 
 from app.training.config import TrainingConfig
-from app.training.train import MissingTrainingDepsError, import_unsloth
+from app.training.train import import_unsloth
+# Re-exported so tests (and callers) can reference export.MissingTrainingDepsError.
+from app.training.train import MissingTrainingDepsError  # noqa: F401
 
 DEFAULT_ARMS_PATH = Path(__file__).resolve().parent.parent.parent / "arms.yaml"
 FT_ARM_NAME = "ft-qwen3-8b-local"
@@ -36,7 +38,10 @@ def build_modelfile(cfg: TrainingConfig, gguf_filename: str) -> str:
         [
             f"FROM ./{gguf_filename}",
             'SYSTEM """/no_think"""',
-            f"PARAMETER num_ctx {cfg.max_seq_len}",
+            # max_seq_len is the *training* sequence length; num_ctx must also
+            # cover the completion the arm is asked for (render_arm_snippet
+            # sets max_tokens: 1024), so give it that much headroom.
+            f"PARAMETER num_ctx {cfg.max_seq_len + 1024}",
             "PARAMETER temperature 0",
             'PARAMETER stop "<|im_end|>"',
             "",
@@ -82,6 +87,13 @@ def export_arm(cfg: TrainingConfig, arms_path: Path | None = None) -> ExportResu
         max_seq_length=cfg.max_seq_len,
         load_in_4bit=False,
         dtype=None,
+    )
+
+    # Save the merged 16-bit HF model first: it is the documented
+    # manual-recovery path (backend/README.md 'Fallbacks' ->
+    # training/artifacts/<run_name>/merged/) if the GGUF toolchain step fails.
+    model.save_pretrained_merged(
+        str(out_dir / "merged"), tokenizer, save_method="merged_16bit"
     )
 
     gguf_dir = out_dir / "gguf"

@@ -24,8 +24,16 @@ class MissingTrainingDepsError(RuntimeError):
 
 
 def import_unsloth() -> ModuleType:
+    # Guard the whole training stack, not just unsloth: a partial install
+    # (unsloth present, trl/datasets/peft/transformers missing) would
+    # otherwise surface as a raw ImportError deep in run_training/export_arm.
+    # unsloth is imported first -- it patches transformers on import.
     try:
         import unsloth
+        import datasets  # noqa: F401
+        import peft  # noqa: F401
+        import transformers  # noqa: F401
+        import trl  # noqa: F401
     except ImportError as exc:
         raise MissingTrainingDepsError(_INSTALL_HINT) from exc
     return unsloth

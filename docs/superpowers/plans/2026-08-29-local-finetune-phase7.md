@@ -2183,6 +2183,16 @@ Expected: a bare `negative` (or close) — **no `<think>` block**. If a
 `<think>` block appears, fix the Modelfile `SYSTEM "/no_think"` handling
 before running the full comparison.
 
+Verify-or-fix (deferred here from the Phase 7 final review — need a GPU + live Ollama):
+- [ ] `ollama create <tag> -f <generated Modelfile>` exits 0 — the generated
+      `TEMPLATE` / `PARAMETER` lines parse with no error.
+- [ ] The exported arm emits a bare sentiment label with **no `<think>`
+      block**; if one appears, fix the Modelfile `SYSTEM "/no_think"` /
+      `TEMPLATE` handling before the comparison run.
+- [ ] Confirm `num_ctx` (now `max_seq_len + 1024` from `build_modelfile`) is
+      >= prompt + completion for the eval prompt; raise it if the smoke-test
+      response comes back truncated.
+
 - [ ] **Step 7: Run the comparison**
 
 ```bash

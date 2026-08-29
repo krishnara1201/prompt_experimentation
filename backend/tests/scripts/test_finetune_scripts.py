@@ -44,6 +44,61 @@ def test_train_dry_run_skips_training(capsys, monkeypatch, fake_dataset):
     assert "dry run" in out.lower()
 
 
+def test_train_reuse_dataset_skips_build(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from scripts import finetune_train
+    from app.training.config import load_training_config
+    from app.training.train import TrainingResult
+
+    (tmp_path / "train.jsonl").write_text(
+        '{"messages": [{"role": "user", "content": "q"}, {"role": "assistant", "content": "positive"}]}\n'
+        '{"messages": [{"role": "user", "content": "q"}, {"role": "assistant", "content": "positive"}]}\n'
+    )
+    (tmp_path / "val.jsonl").write_text(
+        '{"messages": [{"role": "user", "content": "q"}, {"role": "assistant", "content": "neutral"}]}\n'
+    )
+    base = load_training_config("training.yaml")
+    monkeypatch.setattr(
+        finetune_train, "load_training_config", lambda _p: replace(base, output_dir=str(tmp_path))
+    )
+
+    def _boom(cfg):
+        raise AssertionError("build_sft_dataset must not run with --reuse-dataset")
+
+    monkeypatch.setattr(finetune_train, "build_sft_dataset", _boom)
+
+    captured = {}
+
+    def _fake_train(cfg, ds):
+        captured["ds"] = ds
+        return TrainingResult(tmp_path / "adapter", [], 1.0, 42)
+
+    monkeypatch.setattr(finetune_train, "run_training", _fake_train)
+
+    finetune_train.main(["--config", "x", "--reuse-dataset"])
+    ds = captured["ds"]
+    assert ds.source == "(reused)"
+    assert ds.pool_size == 3
+    assert ds.dropped_count == -1
+    assert ds.train_class_counts == {"positive": 2}
+    assert ds.val_class_counts == {"neutral": 1}
+
+
+def test_train_reuse_dataset_missing_files_errors(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from scripts import finetune_train
+    from app.training.config import load_training_config
+
+    base = load_training_config("training.yaml")
+    monkeypatch.setattr(
+        finetune_train, "load_training_config", lambda _p: replace(base, output_dir=str(tmp_path))
+    )
+    with pytest.raises(SystemExit):
+        finetune_train.main(["--config", "x", "--reuse-dataset"])
+
+
 def test_train_calls_run_training(monkeypatch, fake_dataset):
     from scripts import finetune_train
     from app.training.train import TrainingResult
@@ -67,7 +122,7 @@ def test_export_prints_snippet(capsys, monkeypatch):
         finetune_export,
         "export_arm",
         lambda cfg: ExportResult(
-            gguf_path=cfg and None or None,
+            gguf_path=None,
             modelfile_path=None,
             ollama_tag="ft-qwen3-8b",
             snippet_path=None,

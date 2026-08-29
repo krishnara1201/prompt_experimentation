@@ -506,10 +506,14 @@ Everything is in `backend/training.yaml` (the training counterpart to
 
 ### Fallbacks
 
-- **HF subset**: `training.yaml`'s `source_dataset` defaults to a
-  `sentences_75agree` mirror. If it 404s or needs `trust_remote_code`,
-  switch to `sentences_66agree`, `sentences_50agree`, or the canonical
-  `takala/financial_phrasebank` — a one-line config edit.
+- **HF subset**: `training.yaml` defaults to `source_dataset:
+  takala/financial_phrasebank` with `source_config: sentences_75agree`
+  (public parquet configs, no `trust_remote_code`). To loosen the
+  expert-agreement threshold, drop `source_config` to `sentences_66agree`
+  or `sentences_50agree` on the same repo. Switching to a *different*
+  mirror is a **two-line** edit (`source_dataset` **and** `source_config`)
+  because the config-name scheme differs between mirrors — e.g. the
+  `gtfintechlab` mirrors key configs by numeric string, not `sentences_*`.
 - **GGUF conversion** needs a llama.cpp build toolchain (cmake/gcc);
   Unsloth clones + builds it on first `pe finetune export`. If that fails,
   build llama.cpp manually and run `convert_hf_to_gguf.py` +
