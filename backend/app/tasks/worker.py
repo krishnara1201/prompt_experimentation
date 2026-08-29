@@ -16,6 +16,7 @@ from app.adapters.base import ModelResponse
 from app.config.arms import load_arms, load_judge_arm
 from app.db.models import EvalExample, RunResult
 from app.db.session import DATABASE_URL
+from app.eval_prompt import render_eval_prompt
 from app.judge.scorer import JudgeParseError, JudgeResult, score_output
 
 load_dotenv()
@@ -23,21 +24,6 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 ARMS_PATH = Path(__file__).resolve().parent.parent.parent / "arms.yaml"
-
-# EvalExample.text is a bare dataset sentence with no task instruction. Left
-# unframed, different models guess the implied task ("classify this
-# sentence's sentiment") with different reliability -- the judge rubric
-# (app/judge/rubric.py) already assumes the model attempted a
-# classification, so the arm has to actually be asked for one.
-EVAL_PROMPT_TEMPLATE = (
-    "Is the following sentence positive, negative, or neutral from a "
-    "financial-news perspective? Respond with just the sentiment label.\n\n"
-    "Sentence: {text}"
-)
-
-
-def render_eval_prompt(text: str) -> str:
-    return EVAL_PROMPT_TEMPLATE.format(text=text)
 
 celery_app = Celery(
     "worker",
