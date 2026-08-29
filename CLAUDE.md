@@ -71,7 +71,16 @@ a local model and hosted API models.
   signed-rank), Bayesian posterior comparison between arms, multiple-
   comparison correction across arm pairs, sample-size/power calculator.
 - **Dashboard** — React: win-rate table with confidence intervals,
-  cost/latency/quality frontier scatter, judge calibration report.
+  cost/latency/quality frontier scatter, judge calibration report. Runs
+  can be started from a "New run" form (backed by `GET /arms` +
+  `POST /runs`), not only via `curl`.
+- **`pe` CLI** — `backend/app/cli/`, console entrypoint (`uv run pe …`
+  from `backend/`). One command over the whole loop: `docker compose`
+  lifecycle (`up`/`down`/`logs`/`seed`), runs (`run`/`status`/`watch`/
+  `results`/`arms`) and stats (`stats compare|equivalence|power`) over
+  HTTP, and the host-side calibration scripts (`calibrate
+  select|import|report`). `scripts/demo.sh` chains it end to end. Spec:
+  `docs/superpowers/specs/2026-08-29-cli-and-dashboard-run-design.md`.
 
 ## Tech stack
 

@@ -47,17 +47,31 @@ build and proxying `/api` to the backend). Once healthy:
 - Dashboard: http://localhost:5173
 - API: http://localhost:8000
 
-Seed the eval dataset once (idempotent, safe to re-run):
+### Driving it with the `pe` CLI
+
+`pe` is a single entrypoint for the whole loop — stack lifecycle, seeding,
+runs, stats, and judge calibration. Run it with `uv run pe …` from
+`backend/` (uv syncs on first use):
 
 ```bash
-docker compose run --rm migrate uv run python -m scripts.seed_eval_examples
+cd backend
+uv run pe up            # docker compose up -d --build, wait for the API
+uv run pe seed          # seed the eval dataset (idempotent)
+uv run pe run --sample 20 --repeats 3 --seed 42   # start a run, prints run_id
+uv run pe watch 1       # poll until it finishes
+uv run pe stats compare 1                         # paired comparison
+uv run pe arms          # list configured arms
 ```
 
-Then kick off a run:
+`uv run pe --help` lists every command. Point it at a non-default API with
+`PE_API_URL`. Runs can also be started from the dashboard's **New run**
+button; the raw API is still there (`curl -X POST localhost:8000/runs -d
+'{"sample_size": 20, "repeats": 3, "seed": 42}'`).
+
+### One-command demo
 
 ```bash
-curl -X POST localhost:8000/runs -H 'content-type: application/json' \
-  -d '{"sample_size": 20, "repeats": 3, "seed": 42}'
+./scripts/demo.sh      # up + seed + run + watch + compare, end to end
 ```
 
 **Local model (Ollama) arm** — Ollama itself is not containerized; it's
