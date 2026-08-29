@@ -230,10 +230,26 @@ client that spawns from elsewhere should point its own MCP config at an
 absolute path instead.
 
 Tool: `score_financial_sentiment(input_text, gold_label, model_output) ->
-{"score": 1-5, "rationale": str}`, using the same fixed rubric and `judge:`
-config in `arms.yaml` as the automated pipeline. The judge config is
+{"score": 1-5, "rationale": str, "judge_model": str}`, using the same fixed
+rubric and `judge:` config in `arms.yaml` as the automated pipeline.
+`gold_label` must be `"positive"`, `"negative"`, or `"neutral"`; blank
+`input_text` or `model_output` is rejected with a `ValueError` before any
+judge call. `judge_model` echoes back which model produced the score, for
+reproducibility when the `judge:` block changes. The judge config is
 reloaded on every call, so editing `arms.yaml`'s `judge:` block takes
 effect on the next call with no restart.
+
+**Prerequisite:** the judge arm in `arms.yaml` must be usable from wherever
+the server runs — the default (`adapter: claude_code_cli`) needs an
+authenticated `claude` CLI on `PATH`; an `openai_compatible`/`anthropic`
+judge needs its API key in `backend/.env`. A misconfigured judge surfaces
+as a tool error to the calling agent, not a server crash.
+
+How much to trust a single score: the rubric and judge are the same ones
+Phase 3 calibrates against held-out human labels via
+`scripts/calibration_report.py` (Spearman correlation + Cohen's kappa).
+The tool response is deliberately silent on calibration — run that report
+against a real eval before relying on judge scores at scale.
 
 Ad-hoc calls are not persisted — this is for disposable checks during
 iteration, not part of the auditable run history.

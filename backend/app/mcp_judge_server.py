@@ -12,9 +12,13 @@ ARMS_PATH = Path(__file__).resolve().parent.parent / "arms.yaml"
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 
+GOLD_LABELS = ("positive", "negative", "neutral")
+
+
 class ScoreResult(TypedDict):
     score: int
     rationale: str
+    judge_model: str
 
 
 def _load_dotenv_if_present() -> None:
@@ -32,10 +36,20 @@ def _score_financial_sentiment(
     model_output: str,
     adapter: ModelAdapter | None = None,
 ) -> ScoreResult:
+    if not input_text.strip():
+        raise ValueError("input_text must not be empty")
+    if not model_output.strip():
+        raise ValueError("model_output must not be empty")
+    if gold_label not in GOLD_LABELS:
+        raise ValueError(f"gold_label must be one of {GOLD_LABELS}, got {gold_label!r}")
     if adapter is None:
         adapter = load_judge_arm(str(ARMS_PATH))
     result = score_output(adapter, input_text, gold_label, model_output)
-    return {"score": result.score, "rationale": result.rationale}
+    return {
+        "score": result.score,
+        "rationale": result.rationale,
+        "judge_model": getattr(adapter, "model", "unknown"),
+    }
 
 
 @mcp.tool()
@@ -44,7 +58,7 @@ def score_financial_sentiment(
     gold_label: Literal["positive", "negative", "neutral"],
     model_output: str,
 ) -> ScoreResult:
-    """Score a candidate financial-sentiment response (1-5) against a gold label ("positive", "negative", or "neutral"), using this platform's fixed rubric judge."""
+    """Score a candidate financial-sentiment response (1-5) against a gold label ("positive", "negative", or "neutral"), using this platform's fixed rubric judge. Returns the score, a one-sentence rationale, and the judge model that produced them."""
     return _score_financial_sentiment(input_text, gold_label, model_output)
 
 

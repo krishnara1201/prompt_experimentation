@@ -45,8 +45,18 @@ below for why.
 
 ```python
 score_financial_sentiment(input_text: str, gold_label: str, model_output: str) -> dict
-# -> {"score": int (1-5), "rationale": str}
+# -> {"score": int (1-5), "rationale": str, "judge_model": str}
 ```
+
+**Amendment (2026-08-29, post-implementation):** the response also carries
+`judge_model` — the `model` field of the loaded judge adapter (e.g.
+`"opus"`, `"qwen3:8b"`). This is call *provenance*, not calibration status:
+because the judge config is reloaded per call and can be tuned between
+calls, an agent (or a saved transcript) otherwise has no record of which
+model produced a given score. `gold_label` outside
+`{"positive","negative","neutral"}` and blank `input_text`/`model_output`
+now raise `ValueError` before the judge call rather than being passed
+through.
 
 The rubric stays fixed — the same `rubric.py` template used by the
 automated pipeline, reference-guided against `gold_label`. The tool is

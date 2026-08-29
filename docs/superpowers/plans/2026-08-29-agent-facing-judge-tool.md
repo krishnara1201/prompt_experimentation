@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`
 
+**Status:** ✅ Complete (all tasks committed). Post-implementation follow-ups
+also landed: `judge_model` added to the tool response for provenance, input
+validation (`gold_label` domain, non-blank `input_text`/`model_output`), and
+expanded `backend/README.md` Phase 6 notes (judge prerequisite, calibration
+pointer). See the spec's 2026-08-29 amendment.
+
 ## Global Constraints
 
 - Rubric stays fixed (financial-sentiment only) — no arbitrary/custom rubric per call.
@@ -31,7 +37,7 @@
 - Consumes: `app.adapters.base.ModelAdapter` (protocol), `app.config.arms.load_judge_arm(config_path: str) -> ModelAdapter`, `app.judge.scorer.score_output(adapter, input_text, gold_label, model_output) -> JudgeResult` (`JudgeResult.score: int`, `JudgeResult.rationale: str`), `app.judge.scorer.JudgeParseError`.
 - Produces: `app.mcp_judge_server.ARMS_PATH: Path`, `app.mcp_judge_server._score_financial_sentiment(input_text: str, gold_label: str, model_output: str, adapter: ModelAdapter | None = None) -> dict` returning `{"score": int, "rationale": str}`. Task 2 builds on this exact name and signature.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/tests/test_mcp_judge_server.py`:
 
@@ -84,12 +90,12 @@ def test_score_financial_sentiment_loads_judge_arm_when_no_adapter_given(monkeyp
     assert calls == [str(ARMS_PATH)]
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd backend && uv run pytest tests/test_mcp_judge_server.py -v`
 Expected: FAIL/ERROR — `ModuleNotFoundError: No module named 'app.mcp_judge_server'` (the module doesn't exist yet).
 
-- [ ] **Step 3: Implement `_score_financial_sentiment`**
+- [x] **Step 3: Implement `_score_financial_sentiment`**
 
 Create `backend/app/mcp_judge_server.py`:
 
@@ -115,12 +121,12 @@ def _score_financial_sentiment(
     return {"score": result.score, "rationale": result.rationale}
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd backend && uv run pytest tests/test_mcp_judge_server.py -v`
 Expected: PASS (3 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/mcp_judge_server.py backend/tests/test_mcp_judge_server.py
@@ -140,7 +146,7 @@ git commit -m "feat: add core scoring function for agent-facing judge tool"
 - Consumes: Task 1's `_score_financial_sentiment(input_text, gold_label, model_output, adapter=None) -> dict` and `ARMS_PATH`.
 - Produces: `app.mcp_judge_server.mcp: MCPServer` (module-level instance, name `"financial-sentiment-judge"`), `app.mcp_judge_server.score_financial_sentiment(input_text: str, gold_label: str, model_output: str) -> dict` (the MCP-registered tool, directly callable as a plain function), `app.mcp_judge_server.main() -> None`.
 
-- [ ] **Step 1: Add the `mcp` dependency**
+- [x] **Step 1: Add the `mcp` dependency**
 
 Edit `backend/pyproject.toml` — in the `dependencies` list, add a new line after `"pymc>=6.3.1",`:
 
@@ -153,7 +159,7 @@ Edit `backend/pyproject.toml` — in the `dependencies` list, add a new line aft
 Run: `cd backend && uv sync`
 Expected: resolves and installs `mcp` and its transitive dependencies with no errors.
 
-- [ ] **Step 2: Write the failing test for the decorated tool**
+- [x] **Step 2: Write the failing test for the decorated tool**
 
 Append to `backend/tests/test_mcp_judge_server.py`:
 
@@ -175,12 +181,12 @@ def test_mcp_server_instance_has_expected_name():
     assert mcp.name == "financial-sentiment-judge"
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `cd backend && uv run pytest tests/test_mcp_judge_server.py -v`
 Expected: FAIL — `ImportError: cannot import name 'score_financial_sentiment' from 'app.mcp_judge_server'` (and same for `mcp`).
 
-- [ ] **Step 4: Implement the MCP wiring**
+- [x] **Step 4: Implement the MCP wiring**
 
 Modify `backend/app/mcp_judge_server.py` — add these imports at the top (after the existing `pathlib` import) and this code at the end of the file:
 
@@ -227,12 +233,12 @@ if __name__ == "__main__":
 
 (This replaces the whole file from Task 1 — the only change is inserting the `MCPServer` import/instance before `_score_financial_sentiment` and adding the decorated tool + entrypoint after it.)
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `cd backend && uv run pytest tests/test_mcp_judge_server.py -v`
 Expected: PASS (5 passed)
 
-- [ ] **Step 6: Manual sanity check that the server object constructs and the module runs as an entrypoint**
+- [x] **Step 6: Manual sanity check that the server object constructs and the module runs as an entrypoint**
 
 Run: `cd backend && uv run python -c "from app.mcp_judge_server import mcp; print(mcp.name)"`
 Expected output: `financial-sentiment-judge`
@@ -240,12 +246,12 @@ Expected output: `financial-sentiment-judge`
 Run: `cd backend && timeout 3 uv run python -m app.mcp_judge_server; echo "exit code: $?"`
 Expected: the process starts and blocks reading stdio (no crash/traceback); `timeout` kills it after 3s, printing `exit code: 124`. A traceback or immediate non-124 exit means the wiring is broken — stop and fix before continuing.
 
-- [ ] **Step 7: Run the full backend test suite to confirm no regressions**
+- [x] **Step 7: Run the full backend test suite to confirm no regressions**
 
 Run: `cd backend && uv run pytest -v`
 Expected: all tests pass (or skip, for the Ollama/Postgres tests that skip when those services aren't running) — no new failures.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/pyproject.toml backend/uv.lock backend/app/mcp_judge_server.py backend/tests/test_mcp_judge_server.py
@@ -265,7 +271,7 @@ git commit -m "feat: register score_financial_sentiment as an MCP tool"
 - Consumes: nothing new — references the `uv run --directory backend python -m app.mcp_judge_server` command and `score_financial_sentiment` tool name from Task 2.
 - Produces: nothing consumed by later tasks — this is the terminal task.
 
-- [ ] **Step 1: Create the repo-root `.mcp.json`**
+- [x] **Step 1: Create the repo-root `.mcp.json`**
 
 Create `.mcp.json`:
 
@@ -280,12 +286,12 @@ Create `.mcp.json`:
 }
 ```
 
-- [ ] **Step 2: Verify the JSON is well-formed**
+- [x] **Step 2: Verify the JSON is well-formed**
 
 Run: `python3 -c "import json; json.load(open('.mcp.json')); print('valid')"`
 Expected output: `valid`
 
-- [ ] **Step 3: Add the Phase 6 section to `backend/README.md`**
+- [x] **Step 3: Add the Phase 6 section to `backend/README.md`**
 
 In `backend/README.md`, insert the following section immediately before the line `## Tests` (i.e. right after the Phase 3 section's "Watch for judge/arm model overlap" bullet, which is currently the last content before `## Tests`):
 
@@ -314,7 +320,7 @@ Ad-hoc calls are not persisted — this is for disposable checks during
 iteration, not part of the auditable run history.
 ````
 
-- [ ] **Step 4: Mark Phase 6 done in `CLAUDE.md`**
+- [x] **Step 4: Mark Phase 6 done in `CLAUDE.md`**
 
 In `CLAUDE.md`'s "Build phases" section, replace:
 
@@ -339,7 +345,7 @@ with:
    `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`.
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .mcp.json backend/README.md CLAUDE.md
