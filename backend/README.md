@@ -212,47 +212,139 @@ Prints Spearman correlation and Cohen's kappa (score >= 4 treated as
 ## Phase 6: Agent-facing judge tool
 
 Exposes the judge layer (Phase 3) as an MCP tool so a coding agent (e.g. a
-Claude Code session) can score one candidate financial-sentiment response
-against a gold label directly — no eval run, no Celery, no Postgres.
+Claude Code session iterating on a prompt) can score one candidate
+financial-sentiment response against a gold label directly — no eval run,
+no Celery, no Postgres. It calls the same rubric and `judge:` config as the
+automated pipeline.
 
-The repo-root `.mcp.json` registers this automatically for any Claude Code
-session opened in this repo (the standard project-scoped-server approval
-prompt applies). To use it from another MCP client, or to run it directly:
+### 1. Make the tool available
+
+For **Claude Code opened in this repo**, nothing to do — the repo-root
+`.mcp.json` registers the server automatically (approve it at the
+project-scoped-server prompt the first time). Check it loaded with
+`/mcp`; the tool appears as
+`mcp__financial-sentiment-judge__score_financial_sentiment`.
+
+For **any other MCP client**, run the server over stdio:
 
 ```bash
 uv run --directory backend python -m app.mcp_judge_server
 ```
 
-The `.mcp.json` command (`--directory backend`) is relative to the
-client's own working directory, not an absolute path — correct for Claude
-Code, which launches project-scoped servers from the repo root, but a
-client that spawns from elsewhere should point its own MCP config at an
+and point the client's own MCP config at that command. Note the
+`--directory backend` in `.mcp.json` is resolved relative to the client's
+working directory; a client that starts outside the repo root should use an
 absolute path instead.
 
-Tool: `score_financial_sentiment(input_text, gold_label, model_output) ->
-{"score": 1-5, "rationale": str, "judge_model": str}`, using the same fixed
-rubric and `judge:` config in `arms.yaml` as the automated pipeline.
-`gold_label` must be `"positive"`, `"negative"`, or `"neutral"`; blank
-`input_text` or `model_output` is rejected with a `ValueError` before any
-judge call. `judge_model` echoes back which model produced the score, for
-reproducibility when the `judge:` block changes. The judge config is
-reloaded on every call, so editing `arms.yaml`'s `judge:` block takes
-effect on the next call with no restart.
+**Prerequisite — the judge model must be reachable.** The server shells out
+to whatever `arms.yaml`'s `judge:` block names (see step 3). The default
+`adapter: claude_code_cli` needs an authenticated `claude` CLI on `PATH`
+(`claude login`); an `openai_compatible` / `anthropic` judge needs its API
+key in `backend/.env`. A misconfigured judge comes back as a tool error to
+the caller, not a server crash.
 
-**Prerequisite:** the judge arm in `arms.yaml` must be usable from wherever
-the server runs — the default (`adapter: claude_code_cli`) needs an
-authenticated `claude` CLI on `PATH`; an `openai_compatible`/`anthropic`
-judge needs its API key in `backend/.env`. A misconfigured judge surfaces
-as a tool error to the calling agent, not a server crash.
+### 2. Call the tool
 
-How much to trust a single score: the rubric and judge are the same ones
-Phase 3 calibrates against held-out human labels via
-`scripts/calibration_report.py` (Spearman correlation + Cohen's kappa).
-The tool response is deliberately silent on calibration — run that report
-against a real eval before relying on judge scores at scale.
+```
+score_financial_sentiment(
+    input_text:   str,   # the sentence that was classified
+    gold_label:   str,   # "positive" | "negative" | "neutral"
+    model_output: str,   # the candidate response being graded
+) -> {"score": 1-5, "rationale": str, "judge_model": str}
+```
 
-Ad-hoc calls are not persisted — this is for disposable checks during
-iteration, not part of the auditable run history.
+Example call and response:
+
+```jsonc
+// request
+{
+  "input_text": "Shares tumbled 12% after the firm slashed its full-year guidance.",
+  "gold_label": "negative",
+  "model_output": "Negative — a guidance cut and a 12% drop signal a deteriorating outlook."
+}
+// response
+{
+  "score": 5,
+  "rationale": "The response correctly identifies the sentiment as negative, states it directly, and grounds it in the guidance cut and share price drop.",
+  "judge_model": "opus"
+}
+```
+
+The 1-5 scale (reference-guided against `gold_label`):
+
+| Score | Meaning |
+|-------|---------|
+| 5 | Correct sentiment, stated clearly and directly |
+| 4 | Correct sentiment, minor clarity/formatting issues |
+| 3 | Ambiguous, hedged, or only partially matches |
+| 2 | Wrong sentiment, but otherwise coherent and on-topic |
+| 1 | Wrong sentiment, off-topic, malformed, or non-responsive |
+
+`judge_model` echoes back which model produced the score — useful because
+the `judge:` config is reloaded per call and may change between calls.
+
+### 3. Choose the judge model
+
+Edit the top-level `judge:` block in `backend/arms.yaml`. It takes the same
+fields as an eval arm; `adapter` and `model` are required. Changes take
+effect on the **next call** — no server restart.
+
+```yaml
+# Claude via an authenticated CLI seat (default — no API key, no per-token cost)
+judge:
+  adapter: claude_code_cli
+  model: opus
+
+# Hosted OpenAI-schema provider (OpenAI, OpenRouter, Groq, …)
+judge:
+  adapter: openai_compatible
+  base_url: https://api.openai.com/v1
+  model: gpt-4o
+  api_key_env: OPENAI_API_KEY
+  max_tokens: 1024
+
+# Claude via the metered Anthropic API
+judge:
+  adapter: anthropic
+  model: claude-haiku-4-5-20251001
+  api_key_env: ANTHROPIC_API_KEY
+
+# Local Ollama — free, offline, no key
+judge:
+  adapter: openai_compatible
+  base_url: http://localhost:11434/v1
+  model: qwen3:8b
+  max_tokens: 1024
+```
+
+Two things to watch when switching:
+
+- **Don't reuse a model that's also an eval arm** — LLM-as-judge
+  self-preference is a real validity risk (see "Watch for judge/arm model
+  overlap" above).
+- **Re-run calibration.** The Spearman/kappa figures from
+  `scripts/calibration_report.py` are specific to one judge; a new judge is
+  uncalibrated until you re-run that workflow.
+
+### 4. Interpreting a score
+
+A single ad-hoc score is a quick signal, not a verdict. The tool response
+is deliberately silent on calibration — before relying on judge scores at
+scale, run the Phase 3 calibration workflow (`select_calibration_sample` →
+`import_calibration_labels` → `calibration_report`) so you know how well
+this judge agrees with human labels.
+
+Ad-hoc calls are **not persisted** — this is for disposable checks during
+iteration, not part of the auditable `RunResult` / judge-score history.
+
+### Errors
+
+- `gold_label` outside `{"positive", "negative", "neutral"}`, or a blank
+  `input_text` / `model_output`, is rejected before any judge call.
+- A malformed judge response (`JudgeParseError`) or an adapter failure
+  (missing key, network error, unauthenticated CLI) propagates as an MCP
+  tool error — no retries; the calling agent decides whether to retry or
+  rephrase.
 
 ## Tests
 
