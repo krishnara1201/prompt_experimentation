@@ -28,6 +28,10 @@ async def load_metric_by_example(
     if metric == "judge_score":
         stmt = stmt.where(RunResult.judge_status == "completed")
 
+    # Deterministic per-cell repeat order (Postgres gives no ordering guarantee
+    # without an ORDER BY, and physical row order drifts as the table changes).
+    stmt = stmt.order_by(RunResult.repeat_index, RunResult.id)
+
     result = await session.execute(stmt)
     repeats_by_cell: dict[tuple[int, str], list[float]] = {}
     for example_id, arm_name, value in result.all():

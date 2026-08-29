@@ -104,6 +104,15 @@ def _completed_run_result_ids(run_id: int) -> list[int]:
 def _cleanup(run_id: int, example_ids: list[int]) -> None:
     async def _run():
         async with AsyncSession(db_test_engine) as session:
+            result_ids = (
+                await session.execute(select(RunResult.id).where(RunResult.run_id == run_id))
+            ).scalars().all()
+            if result_ids:
+                await session.execute(
+                    delete(JudgeCalibrationLabel).where(
+                        JudgeCalibrationLabel.run_result_id.in_(result_ids)
+                    )
+                )
             await session.execute(delete(RunResult).where(RunResult.run_id == run_id))
             run = await session.get(Run, run_id)
             if run:

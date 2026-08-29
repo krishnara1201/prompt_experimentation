@@ -16,7 +16,10 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def run_result_id():
     async def _setup():
-        async with AsyncSession(db_test_engine) as session:
+        # expire_on_commit=False: this coroutine returns ids read off ORM
+        # objects after a commit; the default would lazy-reload them as sync
+        # IO outside the greenlet and raise MissingGreenlet.
+        async with AsyncSession(db_test_engine, expire_on_commit=False) as session:
             example = EvalExample(text="Profits rose.", gold_label="positive", source="test")
             session.add(example)
             run = Run(arm_names=["fake-arm"], sample_size=None, repeats=1, seed=None, total_calls=1)

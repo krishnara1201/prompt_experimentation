@@ -11,9 +11,21 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _session() -> AsyncSession:
+    """A test session that keeps attributes populated after ``commit()``.
+
+    These tests hold ORM objects across several commits and then read their
+    columns (``example.id`` etc.). With the default ``expire_on_commit=True``
+    that first read triggers a lazy reload -- synchronous IO outside the
+    async greenlet -- which raises ``MissingGreenlet``. ``expire_on_commit=
+    False`` is the setting SQLAlchemy recommends for ``AsyncSession``.
+    """
+    return AsyncSession(db_test_engine, expire_on_commit=False)
+
+
 def test_round_trip_insert_and_read():
     async def _run():
-        async with AsyncSession(db_test_engine) as session:
+        async with _session() as session:
             example = EvalExample(text="Profits rose sharply.", gold_label="positive", source="test")
             session.add(example)
             await session.commit()
@@ -41,7 +53,11 @@ def test_round_trip_insert_and_read():
             assert fetched.output_text == "positive"
             assert fetched.judge_score is None
 
+            # These models declare foreign keys but no ORM relationship(), so
+            # the unit of work will not order the DELETEs -- flush the child
+            # row before deleting the rows it references.
             await session.delete(result)
+            await session.flush()
             await session.delete(run)
             await session.delete(example)
             await session.commit()
@@ -51,7 +67,7 @@ def test_round_trip_insert_and_read():
 
 def test_run_result_judge_columns_default_correctly():
     async def _run():
-        async with AsyncSession(db_test_engine) as session:
+        async with _session() as session:
             example = EvalExample(text="Profits rose sharply.", gold_label="positive", source="test")
             session.add(example)
             await session.commit()
@@ -81,6 +97,7 @@ def test_run_result_judge_columns_default_correctly():
             assert result.judge_celery_task_id is None
 
             await session.delete(result)
+            await session.flush()
             await session.delete(run)
             await session.delete(example)
             await session.commit()
@@ -90,7 +107,7 @@ def test_run_result_judge_columns_default_correctly():
 
 def test_judge_calibration_label_round_trip():
     async def _run():
-        async with AsyncSession(db_test_engine) as session:
+        async with _session() as session:
             example = EvalExample(text="Profits rose sharply.", gold_label="positive", source="test")
             session.add(example)
             run = Run(arm_names=["fake-arm"], sample_size=None, repeats=1, seed=None, total_calls=1)
@@ -120,8 +137,12 @@ def test_judge_calibration_label_round_trip():
             assert fetched.labeled_by == "you@example.com"
             assert fetched.labeled_at is not None
 
+            # Delete leaf-to-root, flushing each level so the FK columns are
+            # cleared in the database before the referenced rows go.
             await session.delete(label)
+            await session.flush()
             await session.delete(result)
+            await session.flush()
             await session.delete(run)
             await session.delete(example)
             await session.commit()

@@ -56,7 +56,10 @@ def test_fetch_judged_rows_only_includes_judge_completed(monkeypatch):
     monkeypatch.setattr("scripts.select_calibration_sample.engine", db_test_engine)
 
     async def _setup():
-        async with AsyncSession(db_test_engine) as session:
+        # expire_on_commit=False: this coroutine returns ids read off ORM
+        # objects after a commit; the default would lazy-reload them as sync
+        # IO outside the greenlet and raise MissingGreenlet.
+        async with AsyncSession(db_test_engine, expire_on_commit=False) as session:
             example = EvalExample(text="Profits rose.", gold_label="positive", source="test")
             session.add(example)
             run = Run(arm_names=["fake-arm"], sample_size=None, repeats=1, seed=None, total_calls=2)

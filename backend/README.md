@@ -263,3 +263,13 @@ uv run pytest -v
 The Ollama end-to-end test skips automatically if Ollama isn't running
 locally, and the database tests skip automatically if Postgres isn't
 reachable.
+
+`.github/workflows/ci.yml` runs this suite on every push and PR against a
+throwaway Postgres + Redis (migrations applied with `alembic upgrade head`
+first), alongside a frontend `lint` + `build` job. The subscription-CLI and
+Ollama e2e tests skip in CI since those binaries/services aren't present.
+
+Where a database test holds ORM objects across commits and reads their
+columns after `asyncio.run()` returns, its session is created with
+`expire_on_commit=False` — the default would turn that read into a lazy
+reload outside the async greenlet and raise `MissingGreenlet`.
