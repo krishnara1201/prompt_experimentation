@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from app.adapters.base import ModelResponse
@@ -61,3 +63,16 @@ def test_mcp_server_instance_has_expected_name():
     from app.mcp_judge_server import mcp
 
     assert mcp.name == "financial-sentiment-judge"
+
+
+def test_dotenv_is_loaded_from_backend_env_file(monkeypatch, tmp_path):
+    from app import mcp_judge_server as mjs
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("MCP_JUDGE_SERVER_TEST_VAR=loaded\n")
+    monkeypatch.setattr(mjs, "ENV_PATH", env_file)
+    monkeypatch.delenv("MCP_JUDGE_SERVER_TEST_VAR", raising=False)
+
+    mjs._load_dotenv_if_present()
+
+    assert os.environ.get("MCP_JUDGE_SERVER_TEST_VAR") == "loaded"
