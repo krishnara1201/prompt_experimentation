@@ -48,6 +48,14 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      # python:3.12-slim has no curl; urlopen raises (non-zero exit) on any
+      # non-2xx, which is the behaviour we want for a healthcheck.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       migrate:
         condition: service_completed_successfully

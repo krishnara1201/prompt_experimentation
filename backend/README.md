@@ -143,6 +143,7 @@ postgres, redis, migrations, the API on `:8000`, and the worker).
 
 | Endpoint | Description |
 | --- | --- |
+| `GET /health` | Liveness/readiness probe: `200 {"status": "ok", "database": "ok"}` when a trivial DB query succeeds, `503 {"status": "error", "database": "unreachable"}` otherwise. Used by the compose `api` healthcheck and the `pe` CLI readiness poll. |
 | `POST /runs` | Create a run: picks the examples (optionally a seeded `sample_size` sample), fans out one Celery task per example × arm × repeat, returns `run_id` and `total_calls`. Body: `arms` (defaults to every arm in `arms.yaml`), `sample_size`, `repeats`, `seed`. |
 | `GET /runs/{run_id}` | Run status — derived from persisted results: `pending`, `running`, `completed`, or `completed_with_errors`, plus completed/failed/pending counts. |
 | `GET /runs/{run_id}/results` | Per-call rows for a run (output text, latency, tokens, cost, error), paginated with `limit` and `offset`. |

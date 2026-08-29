@@ -3,12 +3,16 @@ import { useParams } from 'react-router-dom';
 import { WinRateTable } from '../components/WinRateTable';
 import { FrontierChart } from '../components/FrontierChart';
 import { CalibrationReport } from '../components/CalibrationReport';
+import { EquivalencePanel } from '../components/EquivalencePanel';
+import { PowerPanel } from '../components/PowerPanel';
 
-type TabKey = 'winrate' | 'frontier' | 'calibration';
+type TabKey = 'winrate' | 'frontier' | 'equivalence' | 'power' | 'calibration';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'winrate', label: 'Win-rate' },
   { key: 'frontier', label: 'Frontier' },
+  { key: 'equivalence', label: 'Equivalence' },
+  { key: 'power', label: 'Power' },
   { key: 'calibration', label: 'Calibration' },
 ];
 
@@ -35,6 +39,8 @@ export function RunDashboardPage() {
       </div>
       {tab === 'winrate' && <WinRateTable runId={runIdNum} />}
       {tab === 'frontier' && <FrontierChart runId={runIdNum} />}
+      {tab === 'equivalence' && <EquivalencePanel runId={runIdNum} />}
+      {tab === 'power' && <PowerPanel runId={runIdNum} />}
       {tab === 'calibration' && <CalibrationReport runId={runIdNum} />}
     </div>
   );

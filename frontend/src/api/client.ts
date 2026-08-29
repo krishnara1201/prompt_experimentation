@@ -2,7 +2,9 @@ import type {
   ArmInfo,
   ArmSummaryResponse,
   CalibrationResponse,
+  EquivalenceResponse,
   PairedComparisonResponse,
+  PowerResponse,
   RunCreateRequest,
   RunCreateResponse,
   RunSummary,
@@ -54,4 +56,32 @@ export function fetchCompare(runId: number, metric: string): Promise<PairedCompa
 
 export function fetchCalibration(runId: number): Promise<CalibrationResponse> {
   return getJson<CalibrationResponse>(`/runs/${runId}/calibration`);
+}
+
+export function fetchEquivalence(
+  runId: number,
+  params: { armLocal: string; armApi: string; epsilon: number },
+): Promise<EquivalenceResponse> {
+  const query = new URLSearchParams({
+    metric: 'judge_score',
+    arm_local: params.armLocal,
+    arm_api: params.armApi,
+    epsilon: String(params.epsilon),
+  });
+  return getJson<EquivalenceResponse>(`/runs/${runId}/equivalence?${query}`);
+}
+
+export function fetchPower(
+  runId: number,
+  params: { armA: string; armB: string; power: number; alpha: number; effectSize?: number },
+): Promise<PowerResponse> {
+  const query = new URLSearchParams({
+    metric: 'judge_score',
+    arm_a: params.armA,
+    arm_b: params.armB,
+    power: String(params.power),
+    alpha: String(params.alpha),
+  });
+  if (params.effectSize !== undefined) query.set('effect_size', String(params.effectSize));
+  return getJson<PowerResponse>(`/runs/${runId}/power?${query}`);
 }

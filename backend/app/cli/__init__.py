@@ -69,7 +69,7 @@ def _wait_for_api(timeout: float = 60.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            if httpx.get(f"{base_url()}/runs", timeout=5.0).is_success:
+            if httpx.get(f"{base_url()}/health", timeout=5.0).is_success:
                 typer.secho("API is up.", fg=typer.colors.GREEN)
                 return
         except httpx.RequestError:

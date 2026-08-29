@@ -52,6 +52,34 @@ export interface PairedComparisonResponse {
   p_value_corrected: number | null;
 }
 
+export interface EquivalenceResponse {
+  arm_local: string;
+  arm_api: string;
+  metric: string;
+  epsilon: number;
+  n_examples: number;
+  n_excluded: number;
+  posterior_mean: number;
+  ci_lower: number;
+  ci_upper: number;
+  p_equivalent: number;
+}
+
+export interface PowerResponse {
+  arm_a: string;
+  arm_b: string;
+  metric: string;
+  pilot_n: number;
+  pilot_mean_diff: number;
+  pilot_std_diff: number;
+  effect_size: number;
+  alpha: number;
+  target_power: number;
+  required_n: number;
+  achieved_power: number;
+  n_excluded: number;
+}
+
 export interface CalibrationResponse {
   run_id: number;
   n: number;
