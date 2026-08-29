@@ -3,7 +3,13 @@
 arms:
   - name: qwen3-8b-local
     adapter: openai_compatible
-    base_url: http://localhost:11434/v1
+    # host.docker.internal doesn't route to Ollama on this machine (Docker
+    # Desktop's WSL2 gateway refuses the connection even though Windows'
+    # own localhost:11434 forwarding works) -- using this WSL distro's
+    # actual eth0 IP instead. If Docker containers can no longer reach
+    # Ollama after a WSL restart, get the current IP with
+    # `ip addr show eth0 | grep inet` and update this.
+    base_url: http://172.30.0.127:11434/v1
     model: qwen3:8b
     max_tokens: 1024
 
@@ -29,17 +35,20 @@ arms:
 # queue (see "Subscription-seat CLI arms" below) — otherwise these arms'
 # tasks queue forever with nothing consuming them.
 #
-#   - name: claude-code-sonnet-subscription
-#     adapter: claude_code_cli
-#     model: sonnet
-#
+  - name: claude-code-sonnet-subscription
+    adapter: claude_code_cli
+    model: sonnet
+
 #   - name: codex-subscription
 #     adapter: codex_cli
 #     model: gpt-5-codex
 
+# No ANTHROPIC_API_KEY available locally, so the judge runs on the same
+# authenticated Claude Code CLI session as claude-code-sonnet-subscription
+# above -- deliberately a different model (opus, not sonnet) from that arm
+# to limit self-preference bias (see "Watch for judge/arm model overlap" in
+# backend/README.md); the judge task now routes to the adapter's own
+# celery_queue (subscription_cli), same as the arm.
 judge:
-  adapter: anthropic
-  model: claude-haiku-4-5-20251001
-  api_key_env: ANTHROPIC_API_KEY
-  price_per_1m_input: 1.00
-  price_per_1m_output: 5.00
+  adapter: claude_code_cli
+  model: opus
