@@ -13,6 +13,16 @@ arms:
     model: qwen3:8b
     max_tokens: 1024
 
+  # Phase 7: the QLoRA fine-tune of qwen3:8b on Financial PhraseBank
+  # (`pe finetune train|export`). Same Ollama server, same q4_k_m quant as
+  # the base arm above -- a fair quant-to-quant comparison. Rebuild it with
+  # `pe finetune export` if the `ft-qwen3-8b` Ollama model is missing.
+  - name: ft-qwen3-8b-local
+    adapter: openai_compatible
+    base_url: http://172.30.0.127:11434/v1
+    model: ft-qwen3-8b
+    max_tokens: 1024
+
   - name: gpt-4o-mini
     adapter: openai_compatible
     base_url: https://api.openai.com/v1
