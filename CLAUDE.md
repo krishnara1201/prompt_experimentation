@@ -142,11 +142,14 @@ a local model and hosted API models.
    `/runs/{run_id}/calibration`). Spec:
    `docs/superpowers/specs/2026-08-27-dashboard-design.md`; plan:
    `docs/superpowers/plans/2026-08-27-dashboard.md`.
-6. **Agent-facing judge tool** — expose the judge layer (Phase 3) as a
-   callable tool so local coding agents (e.g. Claude Code sessions) can use
-   this platform's calibrated rubric judge directly, independent of the
-   eval-run pipeline. Deliberately designed after Phase 3 lands, against its
-   actual interface rather than a guess at one.
+6. **Agent-facing judge tool** ✅ **Done.** MCP server
+   (`backend/app/mcp_judge_server.py`) exposes a single
+   `score_financial_sentiment` tool wrapping the existing
+   `judge/scorer.py:score_output`, so a Claude Code session (or any other
+   MCP client) can score a candidate response against a gold label
+   directly, without running a full eval. Discovered automatically via the
+   repo-root `.mcp.json`. Spec:
+   `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`.
 7. **Stretch** — LoRA fine-tune the local model on a subset of the task;
    compare fine-tuned local vs. base local vs. API arms.
 

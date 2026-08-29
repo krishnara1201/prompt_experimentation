@@ -209,6 +209,29 @@ Prints Spearman correlation and Cohen's kappa (score >= 4 treated as
   configuring a different (ideally stronger) model as the judge than any
   arm under comparison.
 
+## Phase 6: Agent-facing judge tool
+
+Exposes the judge layer (Phase 3) as an MCP tool so a coding agent (e.g. a
+Claude Code session) can score one candidate financial-sentiment response
+against a gold label directly — no eval run, no Celery, no Postgres.
+
+The repo-root `.mcp.json` registers this automatically for any Claude Code
+session opened in this repo (the standard project-scoped-server approval
+prompt applies). To use it from another MCP client, or to run it directly:
+
+```bash
+uv run --directory backend python -m app.mcp_judge_server
+```
+
+Tool: `score_financial_sentiment(input_text, gold_label, model_output) ->
+{"score": 1-5, "rationale": str}`, using the same fixed rubric and `judge:`
+config in `arms.yaml` as the automated pipeline. The judge config is
+reloaded on every call, so editing `arms.yaml`'s `judge:` block takes
+effect on the next call with no restart.
+
+Ad-hoc calls are not persisted — this is for disposable checks during
+iteration, not part of the auditable run history.
+
 ## Tests
 
 ```bash
