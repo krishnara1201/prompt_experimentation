@@ -175,8 +175,19 @@ a local model and hosted API models.
 - ~~Confirm API arm approach~~ **Resolved:** model-agnostic, bring-your-own-key
   via config (Phase 1, done) rather than hardcoding Claude Haiku/GPT-4o-mini
   as fixed arms.
-- Confirm final task dataset (Financial PhraseBank vs. FiQA) once
-  licensing/format is checked.
+- ~~Confirm final task dataset (Financial PhraseBank vs. FiQA)~~ **Resolved:**
+  Financial PhraseBank (Malo et al. 2014), 3-class sentence sentiment with
+  expert-agreement labels. Licensed **CC BY-NC-SA 3.0** (verified on the
+  `takala/financial_phrasebank` HF card) — non-commercial, share-alike,
+  attribution. This repo is open source (permissive code license) but the
+  dataset is **not vendored**: the seed script downloads it at runtime via
+  `load_dataset("takala/financial_phrasebank", ...)`, so the dataset's NC
+  terms bind the user who downloads it, not the repo. README must attribute
+  Malo et al. 2014 and state the CC BY-NC-SA 3.0 / non-commercial
+  restriction. The calibration gold subset stores row IDs + human labels
+  (not redistributed source text) to avoid redistributing the licensed
+  corpus. Keep the dataset a config choice so a commercial user can swap in
+  a permissively-licensed sentiment set.
 - ~~Confirm Bayesian library/approach~~ **Resolved:** PyMC (Phase 4, done).
   `experimentation_copilot/backend/app/stats/stat_analysis.py` was purely
   frequentist with no existing Bayesian code to reuse, so this was a fresh
