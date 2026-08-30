@@ -37,6 +37,9 @@ def test_render_arm_snippet():
 
 
 def test_export_arm_raises_without_deps(tmp_path):
+    # A trained adapter exists but no GGUF yet, so export_arm falls through to
+    # the merge/convert path -- which needs unsloth.
+    (tmp_path / "adapter").mkdir()
     try:
         import unsloth  # noqa: F401
     except ImportError:
@@ -44,3 +47,8 @@ def test_export_arm_raises_without_deps(tmp_path):
             export.export_arm(replace(CFG, output_dir=str(tmp_path)), arms_path=FIXTURE)
     else:
         pytest.skip("unsloth is installed in this environment")
+
+
+def test_export_arm_raises_without_trained_adapter(tmp_path):
+    with pytest.raises(export.ExportError, match="no trained adapter"):
+        export.export_arm(replace(CFG, output_dir=str(tmp_path)), arms_path=FIXTURE)
