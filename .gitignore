@@ -10,3 +10,4 @@ node_modules/
 *:Zone.Identifier
 
 backend/training/artifacts/
+backend/unsloth_compiled_cache/

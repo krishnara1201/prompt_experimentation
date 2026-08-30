@@ -165,8 +165,8 @@ a local model and hosted API models.
    as a smoke test. Spec:
    `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`
    (see the 2026-08-29 post-implementation amendment).
-7. **Local fine-tune** 🚧 **Capability built; comparison run pending a GPU
-   session.** `backend/app/training/` — QLoRA fine-tune of Qwen3-8B on the
+7. **Local fine-tune** ✅ **Done (base-vs-fine-tune executed; API arm still
+   pending API keys).** `backend/app/training/` — QLoRA fine-tune of Qwen3-8B on the
    Financial PhraseBank *lower-agreement* subset (disjoint from the
    all-agree eval set, enforced by a leakage guard in
    `training/dataset.py`), then merge → GGUF → `ollama create` so the
@@ -176,8 +176,11 @@ a local model and hosted API models.
    path. Spec:
    `docs/superpowers/specs/2026-08-29-local-finetune-phase7-design.md`;
    plan: `docs/superpowers/plans/2026-08-29-local-finetune-phase7.md`.
-   The executed fine-tuned-vs-base-vs-API comparison lands at
-   `docs/superpowers/reports/2026-08-29-finetune-comparison.md`.
+   The executed comparison lands at
+   `docs/superpowers/reports/2026-08-29-finetune-comparison.md` (run 1731):
+   fine-tune is Bayesian-equivalent-or-better on judge quality and ~2× faster
+   / ~48× fewer output tokens than the base arm; a metered-API leg still needs
+   an API key in `backend/.env` plus a re-run.
 
 ## Open decisions
 

@@ -468,8 +468,12 @@ through Ollama as a normal `openai_compatible` arm.
 - The stack up (`pe up`) and eval examples seeded — the dataset builder
   reads `eval_example` to guarantee the training data is disjoint from it.
 
-Record the resolved dependency versions here after a successful run:
-_(unsloth ==, torch ==, transformers ==, trl ==, bitsandbytes ==)_
+Resolved dependency versions from the run that produced
+`docs/superpowers/reports/2026-08-29-finetune-comparison.md` (RTX 4070 12 GB):
+`unsloth==2026.8.22`, `torch==2.11.0+cu130`, `transformers==5.5.0`,
+`trl==0.24.0`, `peft==0.20.0`, `datasets==4.x`, `bitsandbytes` (current).
+Note `datasets>=4` rejects script-based HF datasets — see Fallbacks for the
+parquet-mirror `source_dataset`.
 
 ### Workflow
 

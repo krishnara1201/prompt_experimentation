@@ -12,6 +12,9 @@ arms:
     base_url: http://172.30.0.127:11434/v1
     model: qwen3:8b
     max_tokens: 1024
+    # qwen3:8b runs with its default thinking mode on -- a single call can
+    # take 20-40s. Wide timeout so a slow think isn't recorded as a failure.
+    timeout: 600
 
   # Phase 7: the QLoRA fine-tune of qwen3:8b on Financial PhraseBank
   # (`pe finetune train|export`). Same Ollama server, same q4_k_m quant as
@@ -22,6 +25,7 @@ arms:
     base_url: http://172.30.0.127:11434/v1
     model: ft-qwen3-8b
     max_tokens: 1024
+    timeout: 600
 
   - name: gpt-4o-mini
     adapter: openai_compatible
