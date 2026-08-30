@@ -138,6 +138,31 @@ candidate financial-sentiment response against a gold label directly,
 without running a full eval. See "Phase 6" in `backend/README.md` for the
 tool signature and how to use it from another MCP client.
 
+## Data & license
+
+The eval benchmark is the **Financial PhraseBank** 100%-agreement subset
+(2264 sentence-level, 3-class financial-sentiment examples with expert
+agreement):
+
+> Malo, P., Sinha, A., Korhonen, P., Wallenius, J., & Takala, P. (2014).
+> *Good debt or bad debt: Detecting semantic orientations in economic
+> texts.* Journal of the Association for Information Science and
+> Technology, 65(4), 782–796.
+
+It is vendored at
+`backend/data/financial_phrasebank/sentences_allagree.txt` (regenerate
+with `backend/scripts/fetch_financial_phrasebank.py`, which pulls the
+`gtfintechlab/financial_phrasebank_sentences_allagree` Hugging Face
+mirror). The judge calibration workflow stores only row IDs plus human
+labels, never redistributed source text.
+
+**The dataset is licensed [CC BY-NC-SA 3.0](http://creativecommons.org/licenses/by-nc-sa/3.0/)**
+— attribution, **non-commercial use only**, and share-alike. Those terms
+bind this repo's bundled copy and anything derived from it. The eval
+dataset is a swap-in point, not hardwired into the stats or judge layers:
+a commercial user should substitute a permissively-licensed sentiment set.
+Repo code is separate from the dataset license.
+
 ## Tech stack
 
 Python, FastAPI, SQLModel, Celery, Redis, PostgreSQL, Alembic, Ollama,
