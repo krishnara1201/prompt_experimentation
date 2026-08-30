@@ -3,13 +3,11 @@
 arms:
   - name: qwen3-8b-local
     adapter: openai_compatible
-    # host.docker.internal doesn't route to Ollama on this machine (Docker
-    # Desktop's WSL2 gateway refuses the connection even though Windows'
-    # own localhost:11434 forwarding works) -- using this WSL distro's
-    # actual eth0 IP instead. If Docker containers can no longer reach
-    # Ollama after a WSL restart, get the current IP with
-    # `ip addr show eth0 | grep inet` and update this.
-    base_url: http://172.30.0.127:11434/v1
+    # localhost is correct for the non-Docker flow and for anyone else's
+    # Docker setup. Running under Docker Compose? Ollama isn't containerized
+    # — override this to host.docker.internal (or your host IP) in your
+    # local working tree only, don't commit it. See the repo-root README.
+    base_url: http://localhost:11434/v1
     model: qwen3:8b
     max_tokens: 1024
     # qwen3:8b runs with its default thinking mode on -- a single call can
@@ -18,11 +16,12 @@ arms:
 
   # Phase 7: the QLoRA fine-tune of qwen3:8b on Financial PhraseBank
   # (`pe finetune train|export`). Same Ollama server, same q4_k_m quant as
-  # the base arm above -- a fair quant-to-quant comparison. Rebuild it with
-  # `pe finetune export` if the `ft-qwen3-8b` Ollama model is missing.
+  # the base arm above -- a fair quant-to-quant comparison. This arm FAILs
+  # until you've built the `ft-qwen3-8b` Ollama model with
+  # `pe finetune export` (needs the optional `training` extra + a GPU).
   - name: ft-qwen3-8b-local
     adapter: openai_compatible
-    base_url: http://172.30.0.127:11434/v1
+    base_url: http://localhost:11434/v1
     model: ft-qwen3-8b
     max_tokens: 1024
     timeout: 600
@@ -46,23 +45,34 @@ arms:
 # Subscription-seat CLI arms — opt-in, not enabled by default. Uncomment
 # once you've authenticated the CLI (`claude login` / `codex login`) AND
 # started the dedicated low-concurrency worker for the `subscription_cli`
-# queue (see "Subscription-seat CLI arms" below) — otherwise these arms'
-# tasks queue forever with nothing consuming them.
+# queue (see "Subscription-seat CLI arms" in backend/README.md) — otherwise
+# these arms' tasks queue forever with nothing consuming them.
 #
-  - name: claude-code-sonnet-subscription
-    adapter: claude_code_cli
-    model: sonnet
-
+#   - name: claude-code-sonnet-subscription
+#     adapter: claude_code_cli
+#     model: sonnet
+#
 #   - name: codex-subscription
 #     adapter: codex_cli
 #     model: gpt-5-codex
 
-# No ANTHROPIC_API_KEY available locally, so the judge runs on the same
-# authenticated Claude Code CLI session as claude-code-sonnet-subscription
-# above -- deliberately a different model (opus, not sonnet) from that arm
-# to limit self-preference bias (see "Watch for judge/arm model overlap" in
-# backend/README.md); the judge task now routes to the adapter's own
-# celery_queue (subscription_cli), same as the arm.
+# LLM-as-judge (Phase 3). Configured separately from the eval arms and never
+# scored as one. Default: the local Ollama model — keyless, offline, no
+# per-call cost, works out of the box in the same setup the local arm needs.
+#
+# For a real comparison, point the judge at a model that is BOTH stronger
+# than every arm under test AND not itself an arm (LLM-as-judge
+# self-preference is a validity risk — see "Watch for judge/arm model
+# overlap" in backend/README.md). Then re-run the calibration workflow. E.g.:
+#
+#   judge:
+#     adapter: openai_compatible
+#     base_url: https://api.openai.com/v1
+#     model: gpt-4o
+#     api_key_env: OPENAI_API_KEY
+#     max_tokens: 1024
 judge:
-  adapter: claude_code_cli
-  model: opus
+  adapter: openai_compatible
+  base_url: http://localhost:11434/v1
+  model: qwen3:8b
+  max_tokens: 1024

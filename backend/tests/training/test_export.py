@@ -20,7 +20,7 @@ def test_build_modelfile_disables_thinking_and_pins_params():
 
 
 def test_read_local_arm_base_url():
-    assert export.read_local_arm_base_url(FIXTURE) == "http://172.30.0.127:11434/v1"
+    assert export.read_local_arm_base_url(FIXTURE) == "http://localhost:11434/v1"
 
 
 def test_read_local_arm_base_url_missing_arm():
@@ -29,11 +29,11 @@ def test_read_local_arm_base_url_missing_arm():
 
 
 def test_render_arm_snippet():
-    snippet = export.render_arm_snippet(CFG, "http://172.30.0.127:11434/v1")
+    snippet = export.render_arm_snippet(CFG, "http://localhost:11434/v1")
     assert "name: ft-qwen3-8b-local" in snippet
     assert "adapter: openai_compatible" in snippet
     assert "model: ft-qwen3-8b" in snippet
-    assert "base_url: http://172.30.0.127:11434/v1" in snippet
+    assert "base_url: http://localhost:11434/v1" in snippet
 
 
 def test_export_arm_raises_without_deps(tmp_path):

@@ -230,10 +230,12 @@ Prints Spearman correlation and Cohen's kappa (score >= 4 treated as
   cost/latency columns if the cost/latency/quality frontier needs to
   account for it.
 - **Watch for judge/arm model overlap.** `arms.yaml`'s default `judge:`
-  entry uses the same underlying model as the `claude-haiku` example eval
-  arm. LLM-as-judge self-preference is a known validity risk — consider
-  configuring a different (ideally stronger) model as the judge than any
-  arm under comparison.
+  entry is the local `qwen3:8b` — keyless and offline, but the *same* model
+  as the `qwen3-8b-local` eval arm. LLM-as-judge self-preference is a known
+  validity risk, so this default is only for getting the pipeline running:
+  for a real comparison, point the judge at a stronger model that is not
+  itself an arm (a commented `gpt-4o` snippet sits right above the `judge:`
+  block), then re-run calibration.
 
 ## Phase 6: Agent-facing judge tool
 
@@ -275,12 +277,11 @@ absolute path if the client starts outside the repo root.
 
 **Prerequisite — the judge model must be reachable.** The server shells out
 to whatever `arms.yaml`'s `judge:` block names (see step 3), regardless of
-which client called the tool. The default `adapter: claude_code_cli` needs
-an authenticated `claude` CLI on `PATH` (`claude login`); an
-`openai_compatible` / `anthropic` judge needs its API key in `backend/.env`.
-Calling the tool from a Codex session does **not** provide a `claude` CLI —
-if you don't have one, switch the judge to `openai_compatible` +
-`OPENAI_API_KEY`, the `codex_cli` adapter, or local Ollama (step 3). A
+which client called the tool. The default points at local Ollama
+(`qwen3:8b`), which needs Ollama running (`ollama serve`); an
+`openai_compatible` / `anthropic` judge needs its API key in `backend/.env`,
+and a `claude_code_cli` judge needs an authenticated `claude` CLI on `PATH`
+(`claude login`). Switch the judge in step 3 to whichever you can reach. A
 misconfigured judge comes back as a tool error to the caller, not a server
 crash.
 
@@ -331,12 +332,16 @@ fields as an eval arm; `adapter` and `model` are required. Changes take
 effect on the **next call** — no server restart.
 
 ```yaml
-# Claude via an authenticated CLI seat (default — no API key, no per-token cost)
+# Local Ollama — free, offline, no key (default; but it's also the
+# qwen3-8b-local eval arm — see the self-preference warning below)
 judge:
-  adapter: claude_code_cli
-  model: opus
+  adapter: openai_compatible
+  base_url: http://localhost:11434/v1
+  model: qwen3:8b
+  max_tokens: 1024
 
-# Hosted OpenAI-schema provider (OpenAI, OpenRouter, Groq, …)
+# Hosted OpenAI-schema provider (OpenAI, OpenRouter, Groq, …) — recommended
+# for a real comparison: stronger than every example arm, overlaps none
 judge:
   adapter: openai_compatible
   base_url: https://api.openai.com/v1
@@ -350,12 +355,10 @@ judge:
   model: claude-haiku-4-5-20251001
   api_key_env: ANTHROPIC_API_KEY
 
-# Local Ollama — free, offline, no key
+# Claude via an authenticated CLI seat — no API key, no per-token cost
 judge:
-  adapter: openai_compatible
-  base_url: http://localhost:11434/v1
-  model: qwen3:8b
-  max_tokens: 1024
+  adapter: claude_code_cli
+  model: opus
 ```
 
 Two things to watch when switching:
@@ -381,7 +384,8 @@ iteration, not part of the auditable `RunResult` / judge-score history.
 ### Example session
 
 Spot-checking three candidate outputs from a sentiment classifier while
-iterating on its prompt (real responses from the default `opus` judge):
+iterating on its prompt (real responses, with the judge configured as
+`claude_code_cli` / `opus`):
 
 ```
 > score_financial_sentiment(
