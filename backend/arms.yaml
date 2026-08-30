@@ -35,6 +35,17 @@ arms:
     price_per_1m_input: 0.15
     price_per_1m_output: 0.60
 
+  - name: gemini-flash
+    adapter: openai_compatible
+    # Gemini's OpenAI-compatible shim. Auth is a plain Bearer token, so the
+    # existing openai_compatible adapter works unchanged.
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    model: gemini-3.6-flash
+    api_key_env: GEMINI_API_KEY
+    max_tokens: 1024
+    price_per_1m_input: 0.30
+    price_per_1m_output: 2.50
+
   - name: claude-haiku
     adapter: anthropic
     model: claude-haiku-4-5-20251001
