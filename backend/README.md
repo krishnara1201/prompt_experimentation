@@ -190,6 +190,17 @@ rubric-based LLM judge (configured via the separate `judge:` key in
 `judge_rationale`; `judge_status` tracks `pending` / `completed` / `failed`
 independently of the generation call's own `status`.
 
+**Judge reliability.** The judge task fans in from every arm call at once,
+so it is the first thing a provider or subscription rate limit throttles.
+Two guards live in `app/tasks/worker.py`: the `run_judge_call` task carries
+a per-worker Celery `rate_limit` (`JUDGE_RATE_LIMIT`, default `30/m`), and
+rate-limit / overload errors — HTTP 429/503/529, or a subscription CLI
+exiting non-zero with an empty stderr — retry on a longer jittered backoff
+(`RATE_LIMIT_*` constants, up to ~90s and 6 attempts) than ordinary
+transient errors. Tune `JUDGE_RATE_LIMIT` down further if your judge
+provider is stricter. A subscription-CLI judge should still get the
+dedicated low-concurrency worker below.
+
 **Before trusting `judge_score` on a full run**, run the calibration
 workflow — CLAUDE.md's differentiator is that judge calibration is
 reported, not assumed:

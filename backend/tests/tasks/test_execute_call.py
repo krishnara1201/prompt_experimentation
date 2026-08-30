@@ -76,7 +76,10 @@ def test_retries_then_succeeds(monkeypatch):
     worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
 
     assert adapter.calls == 3
-    assert sleep_calls == [1.0, 2.0]
+    # jittered exponential backoff: retry 1 in [0.5, 1.0], retry 2 in [1.0, 2.0]
+    assert len(sleep_calls) == 2
+    assert 0.5 <= sleep_calls[0] <= 1.0
+    assert 1.0 <= sleep_calls[1] <= 2.0
     _, kwargs = persist_mock.call_args
     assert kwargs["status"] == "completed"
 

@@ -93,6 +93,8 @@ def test_retries_transient_judge_errors(monkeypatch):
     worker.execute_judge_call(run_result_id=7)
 
     assert adapter.calls == 2
-    assert sleep_calls == [1.0]
+    # jittered exponential backoff: the single retry sleeps within [0.5, 1.0]
+    assert len(sleep_calls) == 1
+    assert 0.5 <= sleep_calls[0] <= 1.0
     _, kwargs = persist_mock.call_args
     assert kwargs["status"] == "completed"
