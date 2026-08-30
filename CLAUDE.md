@@ -177,10 +177,13 @@ a local model and hosted API models.
    `docs/superpowers/specs/2026-08-29-local-finetune-phase7-design.md`;
    plan: `docs/superpowers/plans/2026-08-29-local-finetune-phase7.md`.
    The executed comparison lands at
-   `docs/superpowers/reports/2026-08-29-finetune-comparison.md` (run 1731):
-   fine-tune is Bayesian-equivalent-or-better on judge quality and ~2× faster
-   / ~48× fewer output tokens than the base arm; a metered-API leg still needs
-   an API key in `backend/.env` plus a re-run.
+   `docs/superpowers/reports/2026-08-30-finetune-comparison.md` (run 1914,
+   supersedes the run-1731 report): with the full judge sample the fine-tune is
+   a *significant* quality win over the base (90% vs 80% accuracy, paired
+   Wilcoxon corrected p=0.031, Bayesian posterior +0.30 clearing zero) and
+   ~1.8× faster / ~49× fewer output tokens. The metered-API leg still did not
+   land — a `gemini-flash` arm was added but Google's free tier rate-limited
+   130/150 calls (HTTP 429); a paid key or a throttled re-run is still needed.
 
 ## Open decisions
 

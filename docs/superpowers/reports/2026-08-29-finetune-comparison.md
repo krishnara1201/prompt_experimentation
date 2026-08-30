@@ -1,5 +1,10 @@
 # Fine-tuned vs. base vs. API — financial sentiment (Phase 7)
 
+> **Superseded by `2026-08-30-finetune-comparison.md` (run 1914).** That re-run
+> judged all 150 calls per local arm with one consistent judge; this run's
+> paired quality test rests on only 22 examples after a judge rate-limit burst.
+> The latency / token results below still hold. Kept for history.
+
 Run **1731** (`completed`) — arms `qwen3-8b-local` (base) and `ft-qwen3-8b-local`
 (QLoRA fine-tune), 50 eval examples × 3 repeats = 150 calls per arm. Seed 11.
 Quality metric is the LLM judge's 1–5 `judge_score` (judge: `claude_code_cli`
