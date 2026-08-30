@@ -5,16 +5,24 @@ import httpx
 import typer
 
 DEFAULT_BASE_URL = "http://localhost:8000"
+# The stats endpoints (/compare bootstrap, /equivalence PyMC sampling) can run
+# well past a typical HTTP timeout on a full run. Default generously; override
+# with PE_API_TIMEOUT for a slow host.
+DEFAULT_TIMEOUT_SECONDS = 120.0
 
 
 def base_url() -> str:
     return os.environ.get("PE_API_URL", DEFAULT_BASE_URL).rstrip("/")
 
 
+def _timeout() -> float:
+    return float(os.environ.get("PE_API_TIMEOUT", DEFAULT_TIMEOUT_SECONDS))
+
+
 def _request(method: str, path: str, **kwargs) -> object:
     url = f"{base_url()}{path}"
     try:
-        response = httpx.request(method, url, timeout=30.0, **kwargs)
+        response = httpx.request(method, url, timeout=_timeout(), **kwargs)
     except httpx.RequestError as exc:
         typer.secho(
             f"Cannot reach the API at {base_url()} ({exc}). "

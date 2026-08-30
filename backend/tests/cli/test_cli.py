@@ -100,6 +100,40 @@ def test_connection_error_hints_to_bring_stack_up():
     assert "pe up" in result.output
 
 
+def test_api_request_timeout_defaults_high_enough_for_pymc(monkeypatch):
+    from app.cli import _api
+
+    captured: dict = {}
+
+    def fake_request(method, url, **kwargs):
+        captured.update(kwargs)
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+    monkeypatch.delenv("PE_API_TIMEOUT", raising=False)
+
+    _api.api_get("/runs/1/equivalence")
+
+    assert captured["timeout"] == 120.0
+
+
+def test_api_request_timeout_overridable_via_env(monkeypatch):
+    from app.cli import _api
+
+    captured: dict = {}
+
+    def fake_request(method, url, **kwargs):
+        captured.update(kwargs)
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+    monkeypatch.setenv("PE_API_TIMEOUT", "300")
+
+    _api.api_get("/x")
+
+    assert captured["timeout"] == 300.0
+
+
 @respx.mock
 def test_watch_exits_1_when_calls_failed():
     respx.get(f"{BASE}/runs/9").mock(
