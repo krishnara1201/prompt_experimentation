@@ -2,6 +2,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from app.config.arms import Arm
+from app.eval_prompt import EVAL_PROMPT_TEMPLATE
 from app.main import app
 
 
@@ -10,9 +12,13 @@ class _FakeAdapter:
         self.model = model
 
 
-FAKE_ADAPTERS = {
-    "qwen3-8b-local": _FakeAdapter("qwen3:8b"),
-    "claude-haiku": _FakeAdapter("claude-haiku-4-5-20251001"),
+FAKE_ARMS = {
+    "qwen3-8b-local": Arm("qwen3-8b-local", _FakeAdapter("qwen3:8b")),
+    "claude-haiku": Arm(
+        "claude-haiku",
+        _FakeAdapter("claude-haiku-4-5-20251001"),
+        prompt_template="Sentiment of {text}?",
+    ),
 }
 
 FAKE_RAW = {
@@ -24,13 +30,23 @@ FAKE_RAW = {
 
 
 @patch("app.api.routes.arms.yaml.safe_load", return_value=FAKE_RAW)
-@patch("app.api.routes.arms.load_arms", return_value=FAKE_ADAPTERS)
-def test_list_arms_reports_name_adapter_model(mock_load, mock_yaml):
+@patch("app.api.routes.arms.load_arms", return_value=FAKE_ARMS)
+def test_list_arms_reports_name_adapter_model_and_prompt_template(mock_load, mock_yaml):
     response = TestClient(app).get("/arms")
     assert response.status_code == 200
     assert response.json() == [
-        {"name": "qwen3-8b-local", "adapter": "openai_compatible", "model": "qwen3:8b"},
-        {"name": "claude-haiku", "adapter": "anthropic", "model": "claude-haiku-4-5-20251001"},
+        {
+            "name": "qwen3-8b-local",
+            "adapter": "openai_compatible",
+            "model": "qwen3:8b",
+            "prompt_template": EVAL_PROMPT_TEMPLATE,
+        },
+        {
+            "name": "claude-haiku",
+            "adapter": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "prompt_template": "Sentiment of {text}?",
+        },
     ]
 
 

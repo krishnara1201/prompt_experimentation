@@ -16,6 +16,7 @@ class ArmInfo(BaseModel):
     name: str
     adapter: str
     model: str | None
+    prompt_template: str
 
 
 @router.get("", response_model=list[ArmInfo])
@@ -24,7 +25,7 @@ def list_arms() -> list[ArmInfo]:
     # broken arms.yaml fails here the same way POST /runs would. It drops
     # the adapter-type string, so re-read the raw YAML for that one field.
     try:
-        adapters = load_arms(str(ARMS_PATH))
+        arms = load_arms(str(ARMS_PATH))
         raw = yaml.safe_load(ARMS_PATH.read_text())
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=f"Cannot load arms.yaml: {exc}") from exc
@@ -34,7 +35,8 @@ def list_arms() -> list[ArmInfo]:
         ArmInfo(
             name=name,
             adapter=adapter_type_by_name.get(name, ""),
-            model=getattr(adapter, "model", None),
+            model=getattr(arm.adapter, "model", None),
+            prompt_template=arm.prompt_template,
         )
-        for name, adapter in adapters.items()
+        for name, arm in arms.items()
     ]

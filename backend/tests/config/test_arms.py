@@ -5,12 +5,14 @@ from app.adapters.claude_code_cli import ClaudeCodeCLIAdapter
 from app.adapters.codex_cli import CodexCLIAdapter
 from app.adapters.openai_compatible import OpenAICompatibleAdapter
 from app.config.arms import (
+    Arm,
     InvalidArmConfigError,
     InvalidJudgeConfigError,
     UnknownAdapterError,
     load_arms,
     load_judge_arm,
 )
+from app.eval_prompt import EVAL_PROMPT_TEMPLATE
 
 VALID_CONFIG = """
 arms:
@@ -79,6 +81,39 @@ arms:
 """
 
 
+PROMPT_TEMPLATE_CONFIG = """
+arms:
+  - name: default-prompt-arm
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+
+  - name: custom-prompt-arm
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+    prompt_template: "Classify the sentiment of: {text}"
+"""
+
+PROMPT_TEMPLATE_NO_PLACEHOLDER_CONFIG = """
+arms:
+  - name: broken-prompt-arm
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+    prompt_template: "Classify this sentence, please."
+"""
+
+PROMPT_TEMPLATE_UNKNOWN_PLACEHOLDER_CONFIG = """
+arms:
+  - name: broken-prompt-arm
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+    prompt_template: "Classify {text} in the {register} register."
+"""
+
+
 def test_load_arms_builds_correct_adapter_types(tmp_path):
     config_path = tmp_path / "arms.yaml"
     config_path.write_text(VALID_CONFIG)
@@ -92,11 +127,11 @@ def test_load_arms_builds_correct_adapter_types(tmp_path):
         "claude-code-sonnet-subscription",
         "codex-subscription",
     }
-    assert isinstance(arms["qwen3-8b-local"], OpenAICompatibleAdapter)
-    assert isinstance(arms["gpt-4o-mini"], OpenAICompatibleAdapter)
-    assert isinstance(arms["claude-haiku"], AnthropicAdapter)
-    assert isinstance(arms["claude-code-sonnet-subscription"], ClaudeCodeCLIAdapter)
-    assert isinstance(arms["codex-subscription"], CodexCLIAdapter)
+    assert isinstance(arms["qwen3-8b-local"].adapter, OpenAICompatibleAdapter)
+    assert isinstance(arms["gpt-4o-mini"].adapter, OpenAICompatibleAdapter)
+    assert isinstance(arms["claude-haiku"].adapter, AnthropicAdapter)
+    assert isinstance(arms["claude-code-sonnet-subscription"].adapter, ClaudeCodeCLIAdapter)
+    assert isinstance(arms["codex-subscription"].adapter, CodexCLIAdapter)
 
 
 def test_load_arms_passes_config_fields_through(tmp_path):
@@ -105,11 +140,11 @@ def test_load_arms_passes_config_fields_through(tmp_path):
 
     arms = load_arms(str(config_path))
 
-    local = arms["qwen3-8b-local"]
+    local = arms["qwen3-8b-local"].adapter
     assert local.base_url == "http://localhost:11434/v1"
     assert local.model == "qwen3:8b"
 
-    hosted = arms["gpt-4o-mini"]
+    hosted = arms["gpt-4o-mini"].adapter
     assert hosted.price_per_1m_input == 0.15
     assert hosted.price_per_1m_output == 0.60
 
@@ -120,8 +155,8 @@ def test_load_arms_passes_config_fields_through_for_subscription_cli_arms(tmp_pa
 
     arms = load_arms(str(config_path))
 
-    assert arms["claude-code-sonnet-subscription"].model == "sonnet"
-    assert arms["codex-subscription"].model == "gpt-5-codex"
+    assert arms["claude-code-sonnet-subscription"].adapter.model == "sonnet"
+    assert arms["codex-subscription"].adapter.model == "gpt-5-codex"
 
 
 def test_subscription_cli_arms_route_to_dedicated_celery_queue(tmp_path):
@@ -130,8 +165,64 @@ def test_subscription_cli_arms_route_to_dedicated_celery_queue(tmp_path):
 
     arms = load_arms(str(config_path))
 
-    assert arms["claude-code-sonnet-subscription"].celery_queue == "subscription_cli"
-    assert arms["codex-subscription"].celery_queue == "subscription_cli"
+    assert arms["claude-code-sonnet-subscription"].adapter.celery_queue == "subscription_cli"
+    assert arms["codex-subscription"].adapter.celery_queue == "subscription_cli"
+
+
+def test_load_arms_returns_arm_objects_with_name_and_adapter(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(VALID_CONFIG)
+
+    arm = load_arms(str(config_path))["qwen3-8b-local"]
+
+    assert isinstance(arm, Arm)
+    assert arm.name == "qwen3-8b-local"
+    assert isinstance(arm.adapter, OpenAICompatibleAdapter)
+
+
+def test_arm_prompt_template_defaults_to_the_shared_eval_prompt(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(PROMPT_TEMPLATE_CONFIG)
+
+    arms = load_arms(str(config_path))
+
+    assert arms["default-prompt-arm"].prompt_template == EVAL_PROMPT_TEMPLATE
+
+
+def test_arm_uses_explicit_prompt_template_when_configured(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(PROMPT_TEMPLATE_CONFIG)
+
+    arms = load_arms(str(config_path))
+
+    assert arms["custom-prompt-arm"].prompt_template == "Classify the sentiment of: {text}"
+
+
+def test_arm_render_substitutes_the_example_text(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(PROMPT_TEMPLATE_CONFIG)
+
+    arms = load_arms(str(config_path))
+
+    assert arms["custom-prompt-arm"].render("Profits soared.") == (
+        "Classify the sentiment of: Profits soared."
+    )
+
+
+def test_load_arms_rejects_prompt_template_without_text_placeholder(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(PROMPT_TEMPLATE_NO_PLACEHOLDER_CONFIG)
+
+    with pytest.raises(InvalidArmConfigError):
+        load_arms(str(config_path))
+
+
+def test_load_arms_rejects_prompt_template_with_unknown_placeholder(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(PROMPT_TEMPLATE_UNKNOWN_PLACEHOLDER_CONFIG)
+
+    with pytest.raises(InvalidArmConfigError):
+        load_arms(str(config_path))
 
 
 def test_load_arms_raises_on_unknown_adapter_type(tmp_path):

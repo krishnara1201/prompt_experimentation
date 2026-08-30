@@ -38,6 +38,16 @@ works for Ollama and any provider using the OpenAI chat-completions schema
 (OpenAI, OpenRouter, Groq, Together, etc.); `adapter: anthropic` is for
 Claude models.
 
+## A/B two prompts
+
+Add an optional `prompt_template` to an arm. Two arms with the same
+adapter/model but different templates compare the prompts head to head —
+every arm still sees the same eval examples, so the paired stats apply
+unchanged. The template must contain `{text}` (the eval-example sentence);
+omit `prompt_template` to use the shared default in `app/eval_prompt.py`.
+`GET /arms` reports each arm's resolved template. Commented example in
+`arms.yaml`.
+
 ## Subscription-seat CLI arms (Claude Code, Codex)
 
 `adapter: claude_code_cli` and `adapter: codex_cli` drive the `claude` and

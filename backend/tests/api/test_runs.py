@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.config.arms import Arm
 from app.db.models import EvalExample, Run, RunResult
 from app.db.session import get_session
 from app.main import app
@@ -16,14 +17,17 @@ pytestmark = pytest.mark.skipif(
     not postgres_reachable(), reason="Postgres not running (see docker-compose.yml)"
 )
 
-FAKE_ARMS = {"fake-arm": object()}
+FAKE_ARMS = {"fake-arm": Arm("fake-arm", object())}
 
 
 class _FakeSubscriptionAdapter:
     celery_queue = "subscription_cli"
 
 
-FAKE_ARMS_MIXED = {"fake-arm": object(), "fake-subscription-arm": _FakeSubscriptionAdapter()}
+FAKE_ARMS_MIXED = {
+    "fake-arm": Arm("fake-arm", object()),
+    "fake-subscription-arm": Arm("fake-subscription-arm", _FakeSubscriptionAdapter()),
+}
 
 
 async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:

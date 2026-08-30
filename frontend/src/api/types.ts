@@ -2,6 +2,7 @@ export interface ArmInfo {
   name: string;
   adapter: string;
   model: string | null;
+  prompt_template: string;
 }
 
 export interface RunCreateRequest {

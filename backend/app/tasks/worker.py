@@ -18,7 +18,6 @@ from app.adapters.base import ModelResponse
 from app.config.arms import load_arms, load_judge_arm
 from app.db.models import EvalExample, RunResult
 from app.db.session import DATABASE_URL
-from app.eval_prompt import render_eval_prompt
 from app.judge.scorer import JudgeParseError, score_output
 
 load_dotenv()
@@ -285,7 +284,7 @@ def execute_call(
     # reach total_calls.
     try:
         arms = load_arms(str(ARMS_PATH))
-        adapter = arms[arm_name]
+        arm = arms[arm_name]
     except Exception as exc:
         logger.error(
             "Could not resolve arm (run_id=%s example_id=%s arm=%s repeat=%s): %s",
@@ -304,7 +303,7 @@ def execute_call(
     # must never trigger another billed model call.
     try:
         response = _retry_model_call(
-            lambda: adapter.generate(render_eval_prompt(example_text)),
+            lambda: arm.adapter.generate(arm.render(example_text)),
             standard_max_retries=max_retries,
         )
     except Exception as exc:

@@ -61,6 +61,12 @@ a local model and hosted API models.
   - API: model-agnostic via config — `arms.yaml` currently has example arms
     for GPT-4o-mini and Claude Haiku, but any OpenAI-schema or Anthropic
     provider works without code changes.
+  - **Prompts are arms too.** An arm carries an optional `prompt_template`
+    (must contain `{text}`; defaults to `app/eval_prompt.py`). Two arms with
+    the same model but different templates A/B the prompts — the paired
+    stats apply unchanged. `config/arms.py` wraps each adapter in an `Arm`
+    (`name`, `adapter`, `prompt_template`); `GET /arms` reports the resolved
+    template.
 - **Orchestrator** — Celery + Redis, runs (eval set) × (arms) × (N repeats)
   as async jobs. Reuse the async job pattern from `experimentation_copilot`.
 - **Results store** — Postgres: raw prompts, outputs, judge scores, latency,

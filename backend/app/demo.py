@@ -35,9 +35,9 @@ def main() -> None:
     load_dotenv()
     arms = load_arms(str(ARMS_PATH))
     for prompt in PROMPTS:
-        for arm_name, adapter in arms.items():
+        for arm_name, arm in arms.items():
             try:
-                response = adapter.generate(prompt)
+                response = arm.adapter.generate(prompt)
             except Exception as exc:
                 print(f"[{arm_name}] prompt={prompt!r} FAILED: {exc}")
                 continue

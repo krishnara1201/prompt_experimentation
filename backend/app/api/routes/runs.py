@@ -144,7 +144,7 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
     def _enqueue_all() -> None:
         for example_id, example_text in chosen:
             for arm_name in arm_names:
-                queue = getattr(available_arms[arm_name], "celery_queue", "celery")
+                queue = getattr(available_arms[arm_name].adapter, "celery_queue", "celery")
                 for repeat_index in range(payload.repeats):
                     run_single_call.apply_async(
                         kwargs={

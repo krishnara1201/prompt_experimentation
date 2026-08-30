@@ -53,6 +53,28 @@ arms:
     price_per_1m_input: 1.00
     price_per_1m_output: 5.00
 
+# A/B-ing prompts: give two arms the same adapter/model but a different
+# `prompt_template`. Every arm still sees the same eval examples, so the
+# paired stats compare the prompts head to head. The template must contain
+# `{text}` (the eval-example sentence); omit it entirely to use the shared
+# default in app/eval_prompt.py.
+#
+#   - name: qwen3-terse-prompt
+#     adapter: openai_compatible
+#     base_url: http://localhost:11434/v1
+#     model: qwen3:8b
+#     prompt_template: "Sentiment (positive/negative/neutral) of: {text}"
+#
+#   - name: qwen3-cot-prompt
+#     adapter: openai_compatible
+#     base_url: http://localhost:11434/v1
+#     model: qwen3:8b
+#     prompt_template: |
+#       Classify the financial sentiment of the sentence below as positive,
+#       negative, or neutral. Think step by step, then end with the label.
+#
+#       Sentence: {text}
+
 # Subscription-seat CLI arms — opt-in, not enabled by default. Uncomment
 # once you've authenticated the CLI (`claude login` / `codex login`) AND
 # started the dedicated low-concurrency worker for the `subscription_cli`
