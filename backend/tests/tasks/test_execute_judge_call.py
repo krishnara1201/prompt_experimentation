@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -98,3 +99,60 @@ def test_retries_transient_judge_errors(monkeypatch):
     assert 0.5 <= sleep_calls[0] <= 1.0
     _, kwargs = persist_mock.call_args
     assert kwargs["status"] == "completed"
+
+
+def test_execute_judge_call_uses_task_rubric(monkeypatch):
+    seen = {}
+
+    class _Adapter:
+        def generate(self, prompt):
+            seen["prompt"] = prompt
+            return ModelResponse(
+                text="SCORE: 4\nRATIONALE: fine",
+                latency_ms=1.0,
+                prompt_tokens=1,
+                completion_tokens=1,
+            )
+
+    monkeypatch.setattr(worker, "load_judge_arm", lambda path: _Adapter())
+    monkeypatch.setattr(
+        worker,
+        "_load_run_result_for_judging",
+        AsyncMock(return_value=("Chip firm posts record quarter.", "Business", "Business")),
+    )
+    fake_task = SimpleNamespace(
+        rubric="TOPICR {input_text}|{gold_label}|{model_output}", description="a topic task"
+    )
+    monkeypatch.setattr(worker, "load_task", lambda name: fake_task)
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_judge_result", persist_mock)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    worker.execute_judge_call(run_result_id=1, task_name="ag_news")
+
+    assert seen["prompt"].startswith("TOPICR ")
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "completed"
+    assert kwargs["score"] == 4
+
+
+def test_execute_judge_call_persists_failure_on_unknown_task(monkeypatch):
+    monkeypatch.setattr(worker, "load_judge_arm", lambda path: FakeJudgeAdapter([GOOD_RESPONSE]))
+    monkeypatch.setattr(
+        worker,
+        "_load_run_result_for_judging",
+        AsyncMock(return_value=("text", "positive", "The tone is positive.")),
+    )
+    persist_mock = AsyncMock()
+    monkeypatch.setattr(worker, "_persist_judge_result", persist_mock)
+
+    def _boom(name):
+        raise ValueError(f"no task pack {name!r}")
+
+    monkeypatch.setattr(worker, "load_task", _boom)
+
+    worker.execute_judge_call(run_result_id=7, task_name="nonexistent")
+
+    _, kwargs = persist_mock.call_args
+    assert kwargs["status"] == "failed"
+    assert "nonexistent" in kwargs["error_message"]

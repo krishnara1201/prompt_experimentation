@@ -16,6 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.adapters.base import ModelResponse
 from app.config.arms import load_arms, load_judge_arm
+from app.config.tasks import load_task
 from app.db.models import EvalExample, RunResult
 from app.db.session import DATABASE_URL
 from app.judge.scorer import JudgeParseError, score_output
@@ -250,6 +251,7 @@ def execute_call(
     example_text: str,
     arm_name: str,
     repeat_index: int,
+    task_name: str = "financial_sentiment",
     celery_task_id: str | None = None,
     max_retries: int = STANDARD_MAX_RETRIES,
 ) -> None:
@@ -283,19 +285,21 @@ def execute_call(
     # produce a persisted failed row, or the run's derived status can never
     # reach total_calls.
     try:
-        arms = load_arms(str(ARMS_PATH))
+        task_cfg = load_task(task_name)
+        arms = load_arms(str(ARMS_PATH), task=task_cfg)
         arm = arms[arm_name]
     except Exception as exc:
         logger.error(
-            "Could not resolve arm (run_id=%s example_id=%s arm=%s repeat=%s): %s",
+            "Could not resolve arm (run_id=%s example_id=%s arm=%s repeat=%s task=%s): %s",
             run_id,
             example_id,
             arm_name,
             repeat_index,
+            task_name,
             exc,
             exc_info=True,
         )
-        _persist_failure(f"Could not resolve arm '{arm_name}': {exc!r}")
+        _persist_failure(f"Could not resolve arm '{arm_name}' for task '{task_name}': {exc!r}")
         return
 
     # Only the model call is retried. Persisting a successful response is
@@ -334,17 +338,28 @@ def execute_call(
     # a subscription-CLI eval arm -- .delay() would enqueue to the default
     # queue and hang forever with nothing eligible to consume it.
     judge_queue = getattr(load_judge_arm(str(ARMS_PATH)), "celery_queue", "celery")
-    run_judge_call.apply_async(kwargs={"run_result_id": result_id}, queue=judge_queue)
+    run_judge_call.apply_async(
+        kwargs={"run_result_id": result_id, "task_name": task_name}, queue=judge_queue
+    )
 
 
 @celery_app.task(bind=True)
-def run_single_call(self, run_id: int, example_id: int, example_text: str, arm_name: str, repeat_index: int) -> None:
+def run_single_call(
+    self,
+    run_id: int,
+    example_id: int,
+    example_text: str,
+    arm_name: str,
+    repeat_index: int,
+    task_name: str = "financial_sentiment",
+) -> None:
     execute_call(
         run_id=run_id,
         example_id=example_id,
         example_text=example_text,
         arm_name=arm_name,
         repeat_index=repeat_index,
+        task_name=task_name,
         celery_task_id=self.request.id,
     )
 
@@ -352,6 +367,7 @@ def run_single_call(self, run_id: int, example_id: int, example_text: str, arm_n
 def execute_judge_call(
     *,
     run_result_id: int,
+    task_name: str = "financial_sentiment",
     celery_task_id: str | None = None,
     max_retries: int = STANDARD_MAX_RETRIES,
 ) -> None:
@@ -390,6 +406,15 @@ def execute_judge_call(
     input_text, gold_label, model_output = loaded
 
     try:
+        task_cfg = load_task(task_name)
+    except Exception as exc:
+        logger.error(
+            "Could not resolve task %r for judging (run_result_id=%s): %s", task_name, run_result_id, exc
+        )
+        _persist_failure(f"Could not resolve task {task_name!r}: {exc!r}")
+        return
+
+    try:
         judge_adapter = load_judge_arm(str(ARMS_PATH))
     except Exception as exc:
         logger.error("Could not resolve judge arm (run_result_id=%s): %s", run_result_id, exc, exc_info=True)
@@ -398,7 +423,14 @@ def execute_judge_call(
 
     try:
         judge_result = _retry_model_call(
-            lambda: score_output(judge_adapter, input_text, gold_label, model_output),
+            lambda: score_output(
+                judge_adapter,
+                input_text,
+                gold_label,
+                model_output,
+                rubric_template=task_cfg.rubric,
+                description=task_cfg.description,
+            ),
             standard_max_retries=max_retries,
         )
     except Exception as exc:
@@ -418,5 +450,7 @@ def execute_judge_call(
 
 
 @celery_app.task(bind=True, rate_limit=JUDGE_RATE_LIMIT)
-def run_judge_call(self, run_result_id: int) -> None:
-    execute_judge_call(run_result_id=run_result_id, celery_task_id=self.request.id)
+def run_judge_call(self, run_result_id: int, task_name: str = "financial_sentiment") -> None:
+    execute_judge_call(
+        run_result_id=run_result_id, task_name=task_name, celery_task_id=self.request.id
+    )

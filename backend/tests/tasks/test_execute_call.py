@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -28,7 +29,7 @@ class FakeAdapter:
 
 def test_sends_task_framed_prompt_not_bare_example_text(monkeypatch):
     adapter = FakeAdapter([SUCCESS])
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     monkeypatch.setattr(worker, "_persist_run_result", AsyncMock())
     monkeypatch.setattr(worker, "run_judge_call", MagicMock())
 
@@ -49,7 +50,7 @@ def test_sends_task_framed_prompt_not_bare_example_text(monkeypatch):
 def test_uses_the_arms_own_prompt_template(monkeypatch):
     adapter = FakeAdapter([SUCCESS])
     arm = Arm("prompt-b", adapter, prompt_template="Rate the sentiment — {text}")
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"prompt-b": arm})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"prompt-b": arm})
     monkeypatch.setattr(worker, "_persist_run_result", AsyncMock())
     monkeypatch.setattr(worker, "run_judge_call", MagicMock())
 
@@ -62,7 +63,7 @@ def test_uses_the_arms_own_prompt_template(monkeypatch):
 
 def test_succeeds_on_first_try(monkeypatch):
     adapter = FakeAdapter([SUCCESS])
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     monkeypatch.setattr(worker, "run_judge_call", MagicMock())
@@ -81,7 +82,7 @@ def test_succeeds_on_first_try(monkeypatch):
 
 def test_retries_then_succeeds(monkeypatch):
     adapter = FakeAdapter([RuntimeError("timeout"), RuntimeError("timeout"), SUCCESS])
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     monkeypatch.setattr(worker, "run_judge_call", MagicMock())
@@ -101,7 +102,7 @@ def test_retries_then_succeeds(monkeypatch):
 
 def test_persists_failure_after_exhausting_retries(monkeypatch):
     adapter = FakeAdapter([RuntimeError("boom")] * 4)
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     monkeypatch.setattr(worker.time, "sleep", lambda s: None)
@@ -148,7 +149,7 @@ def test_is_retryable_classification(exc, retryable):
 def test_does_not_retry_missing_api_key(monkeypatch):
     exc = RuntimeError("No API key found in environment variable 'OPENAI_API_KEY'")
     adapter = FakeAdapter([exc] * 4)
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     sleep_calls = []
@@ -166,7 +167,7 @@ def test_does_not_retry_missing_api_key(monkeypatch):
 def test_does_not_retry_unauthenticated_subscription_cli(monkeypatch):
     exc = RuntimeError("Claude Code CLI is not authenticated: not logged in")
     adapter = FakeAdapter([exc] * 4)
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     sleep_calls = []
@@ -183,7 +184,7 @@ def test_does_not_retry_unauthenticated_subscription_cli(monkeypatch):
 
 def test_does_not_retry_4xx(monkeypatch):
     adapter = FakeAdapter([_http_status_error(400)] * 4)
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     sleep_calls = []
@@ -199,7 +200,7 @@ def test_does_not_retry_4xx(monkeypatch):
 
 def test_still_retries_429(monkeypatch):
     adapter = FakeAdapter([_http_status_error(429), _http_status_error(429), SUCCESS])
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     monkeypatch.setattr(worker, "run_judge_call", MagicMock())
@@ -218,7 +219,7 @@ class _FakeSubscriptionJudgeAdapter:
 
 def test_enqueues_judge_call_after_successful_persist(monkeypatch):
     adapter = FakeAdapter([SUCCESS])
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     monkeypatch.setattr(worker, "load_judge_arm", lambda path: object())
     persist_mock = AsyncMock(return_value=42)
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
@@ -228,7 +229,9 @@ def test_enqueues_judge_call_after_successful_persist(monkeypatch):
 
     worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
 
-    judge_task_mock.apply_async.assert_called_once_with(kwargs={"run_result_id": 42}, queue="celery")
+    judge_task_mock.apply_async.assert_called_once_with(
+        kwargs={"run_result_id": 42, "task_name": "financial_sentiment"}, queue="celery"
+    )
 
 
 def test_enqueues_judge_call_on_judge_adapters_dedicated_queue(monkeypatch):
@@ -237,7 +240,7 @@ def test_enqueues_judge_call_on_judge_adapters_dedicated_queue(monkeypatch):
     # the CLI binary/auth only exists where that dedicated worker runs, not
     # on the default queue's workers.
     adapter = FakeAdapter([SUCCESS])
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     monkeypatch.setattr(worker, "load_judge_arm", lambda path: _FakeSubscriptionJudgeAdapter())
     persist_mock = AsyncMock(return_value=42)
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
@@ -247,12 +250,14 @@ def test_enqueues_judge_call_on_judge_adapters_dedicated_queue(monkeypatch):
 
     worker.execute_call(run_id=1, example_id=2, example_text="hi", arm_name="fake-arm", repeat_index=0)
 
-    judge_task_mock.apply_async.assert_called_once_with(kwargs={"run_result_id": 42}, queue="subscription_cli")
+    judge_task_mock.apply_async.assert_called_once_with(
+        kwargs={"run_result_id": 42, "task_name": "financial_sentiment"}, queue="subscription_cli"
+    )
 
 
 def test_does_not_enqueue_judge_call_on_failure(monkeypatch):
     adapter = FakeAdapter([RuntimeError("boom")] * 4)
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     monkeypatch.setattr(worker, "_persist_run_result", AsyncMock())
     judge_task_mock = MagicMock()
     monkeypatch.setattr(worker, "run_judge_call", judge_task_mock)
@@ -266,7 +271,7 @@ def test_does_not_enqueue_judge_call_on_failure(monkeypatch):
 def test_db_failure_after_success_does_not_retry_the_model_call(monkeypatch):
     """A billed model call must never be repeated because the DB write failed."""
     adapter = FakeAdapter([SUCCESS, SUCCESS, SUCCESS, SUCCESS])
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     persist_mock = AsyncMock(side_effect=OSError("postgres is down"))
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     monkeypatch.setattr(worker.time, "sleep", lambda s: None)
@@ -282,7 +287,7 @@ def test_db_failure_after_success_does_not_retry_the_model_call(monkeypatch):
 
 def test_db_failure_on_terminal_persist_does_not_crash_the_task(monkeypatch, caplog):
     adapter = FakeAdapter([RuntimeError("boom")] * 4)
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
     monkeypatch.setattr(worker, "_persist_run_result", AsyncMock(side_effect=OSError("postgres is down")))
     monkeypatch.setattr(worker.time, "sleep", lambda s: None)
 
@@ -295,7 +300,7 @@ def test_db_failure_on_terminal_persist_does_not_crash_the_task(monkeypatch, cap
 
 
 def test_unknown_arm_persists_failed_row_without_retrying(monkeypatch):
-    monkeypatch.setattr(worker, "load_arms", lambda path: {"other-arm": object()})
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"other-arm": object()})
     persist_mock = AsyncMock()
     monkeypatch.setattr(worker, "_persist_run_result", persist_mock)
     sleep_calls = []
@@ -311,7 +316,7 @@ def test_unknown_arm_persists_failed_row_without_retrying(monkeypatch):
 
 
 def test_malformed_arms_config_persists_failed_row(monkeypatch):
-    def _boom(path):
+    def _boom(path, task=None):
         raise ValueError("malformed arms.yaml")
 
     monkeypatch.setattr(worker, "load_arms", _boom)
@@ -323,3 +328,28 @@ def test_malformed_arms_config_persists_failed_row(monkeypatch):
     _, kwargs = persist_mock.call_args
     assert kwargs["status"] == "failed"
     assert "malformed arms.yaml" in kwargs["error_message"]
+
+
+def test_execute_call_threads_task_name_to_judge(monkeypatch):
+    adapter = FakeAdapter([SUCCESS])
+    monkeypatch.setattr(worker, "load_arms", lambda path, task=None: {"fake-arm": Arm("fake-arm", adapter)})
+    monkeypatch.setattr(
+        worker,
+        "load_task",
+        lambda name: SimpleNamespace(
+            eval_prompt="x {text}", rubric="r", description="d", source="s", labels=("positive",)
+        ),
+    )
+    captured = {}
+    judge_task_mock = MagicMock()
+    judge_task_mock.apply_async.side_effect = lambda **kw: captured.update(kw)
+    monkeypatch.setattr(worker, "run_judge_call", judge_task_mock)
+    monkeypatch.setattr(worker, "_persist_run_result", AsyncMock(return_value=123))
+    monkeypatch.setattr(worker, "load_judge_arm", lambda path: SimpleNamespace(celery_queue="celery"))
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    worker.execute_call(
+        run_id=1, example_id=1, example_text="hi", arm_name="fake-arm", repeat_index=0, task_name="ag_news"
+    )
+
+    assert captured["kwargs"]["task_name"] == "ag_news"
