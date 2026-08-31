@@ -1,0 +1,21 @@
+name: task_sample
+description: a news-topic classification
+labels: [World, Sports, Business, SciTech]
+source: task_sample
+data: data.jsonl
+format: jsonl
+eval_prompt: |-
+  Classify the topic. Answer with only the label.
+
+  Snippet: {text}
+rubric: |
+  You are grading a {description} model's response.
+
+  Input text: {input_text}
+  Correct label: {gold_label}
+  Model's response: {model_output}
+
+  Score 1-5 (5 = correct label {gold_label}, 1 = wrong/off-topic).
+
+  SCORE: <1-5>
+  RATIONALE: <one sentence>

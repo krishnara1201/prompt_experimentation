@@ -1,0 +1,32 @@
+# The default evaluation task: 3-class financial-news sentiment on the
+# vendored Financial PhraseBank 100%-agreement subset. See the repo README
+# "Data & license" section. This pack reproduces the pre-task-pack
+# hardcoded behaviour byte-for-byte.
+name: financial_sentiment
+description: a financial-sentiment
+labels: [positive, negative, neutral]
+source: financial_phrasebank_allagree
+data: ../../data/financial_phrasebank/sentences_allagree.txt
+format: phrasebank
+label_names: [negative, neutral, positive]  # int->word, training only
+eval_prompt: |-
+  Is the following sentence positive, negative, or neutral from a financial-news perspective? Respond with just the sentiment label.
+
+  Sentence: {text}
+rubric: |
+  You are grading a financial-sentiment model's response.
+
+  Input text: {input_text}
+  Correct sentiment: {gold_label}
+  Model's response: {model_output}
+
+  Score the response 1-5:
+  5 = correctly identifies the sentiment as {gold_label}, clearly and directly
+  4 = correctly identifies the sentiment, but with minor clarity/formatting issues
+  3 = ambiguous, hedged, or only partially matches the correct sentiment
+  2 = identifies the wrong sentiment but the response is otherwise coherent/on-topic
+  1 = wrong sentiment, off-topic, malformed, or non-responsive
+
+  Respond in exactly this format:
+  SCORE: <1-5>
+  RATIONALE: <one sentence>
