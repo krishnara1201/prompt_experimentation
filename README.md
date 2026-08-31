@@ -28,6 +28,15 @@ corrected p = 0.37, Bayesian P(equivalent) = 1.00 at ε = 0.5) while CoT costs
 noise gap as a CoT win
 ([full report](docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md)).
 
+A third experiment **calibrates the LLM judge** against 50 hand-labeled
+financial-sentiment rows (blind to the judge's score): perfect agreement on
+label-correctness (Cohen's κ = 1.00), and the one disagreement pattern is the
+judge collapsing the 1–5 rubric to a binary
+([full report](docs/superpowers/reports/2026-08-31-judge-calibration-financial.md)).
+
+**[`docs/RESULTS.md`](docs/RESULTS.md) is the readable walk-through of all
+three** — the question, what each found, and the honest gap below.
+
 > **Honest gap:** no hosted-API arm has completed a full run yet — the
 > project's headline "is a local model good enough to replace a hosted API?"
 > comparison is still unbacked (a Gemini free-tier arm was rate-limited on
