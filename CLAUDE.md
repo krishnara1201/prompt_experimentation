@@ -192,9 +192,10 @@ a local model and hosted API models.
    path. Spec:
    `docs/superpowers/specs/2026-08-29-local-finetune-phase7-design.md`;
    plan: `docs/superpowers/plans/2026-08-29-local-finetune-phase7.md`.
-   The executed comparison lands at
-   `docs/superpowers/reports/2026-08-30-finetune-comparison.md` (run 1914,
-   supersedes the run-1731 report): with the full judge sample the fine-tune is
+   The executed comparison (Deliverable 1) lands at
+   `docs/superpowers/reports/2026-08-30-finetune-comparison.md` (run 1914; the
+   thinner run-1731 writeup is archived under `reports/archive/`): with the full
+   judge sample the fine-tune is
    a *significant* quality win over the base (90% vs 80% accuracy, paired
    Wilcoxon corrected p=0.031, Bayesian posterior +0.30 clearing zero) and
    ~1.8× faster / ~49× fewer output tokens. The metered-API leg still did not
