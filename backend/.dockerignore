@@ -19,3 +19,9 @@ __pycache__/
 tests/
 .git
 .gitignore
+
+# Fine-tune outputs / caches — multi-GB, never needed in the image.
+# (`pe finetune` runs on the host, not in the container.)
+training/
+unsloth_compiled_cache/
+*.log
