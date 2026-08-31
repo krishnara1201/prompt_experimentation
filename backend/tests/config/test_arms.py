@@ -225,6 +225,48 @@ def test_load_arms_rejects_prompt_template_with_unknown_placeholder(tmp_path):
         load_arms(str(config_path))
 
 
+def test_arm_bare_construction_still_yields_concrete_default_template():
+    # The None default on the dataclass field is invisible to bare
+    # construction -- __post_init__ fills it with the concrete template.
+    assert Arm("x", object()).prompt_template == EVAL_PROMPT_TEMPLATE
+
+
+def test_load_arms_without_task_uses_legacy_default_template(tmp_path):
+    from app.eval_prompt import EVAL_PROMPT_TEMPLATE
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(
+        "arms:\n  - name: a\n    adapter: openai_compatible\n"
+        "    base_url: http://x/v1\n    model: m\n"
+    )
+    arm = load_arms(str(config_path))["a"]
+    assert arm.prompt_template == EVAL_PROMPT_TEMPLATE
+
+
+def test_load_arms_with_task_uses_task_eval_prompt_for_unset_arms(tmp_path):
+    from app.config.tasks import load_task
+    task = load_task("financial_sentiment")
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(
+        "arms:\n  - name: a\n    adapter: openai_compatible\n"
+        "    base_url: http://x/v1\n    model: m\n"
+    )
+    arm = load_arms(str(config_path), task=task)["a"]
+    assert arm.prompt_template == task.eval_prompt
+
+
+def test_load_arms_arm_level_template_overrides_task(tmp_path):
+    from app.config.tasks import load_task
+    task = load_task("financial_sentiment")
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(
+        "arms:\n  - name: a\n    adapter: openai_compatible\n"
+        "    base_url: http://x/v1\n    model: m\n"
+        '    prompt_template: "custom {text}"\n'
+    )
+    arm = load_arms(str(config_path), task=task)["a"]
+    assert arm.prompt_template == "custom {text}"
+
+
 def test_load_arms_raises_on_unknown_adapter_type(tmp_path):
     config_path = tmp_path / "arms.yaml"
     config_path.write_text(INVALID_CONFIG)

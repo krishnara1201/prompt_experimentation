@@ -29,9 +29,13 @@ FAKE_RAW = {
 }
 
 
+@patch("app.api.routes.arms.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.arms.load_task")
 @patch("app.api.routes.arms.yaml.safe_load", return_value=FAKE_RAW)
 @patch("app.api.routes.arms.load_arms", return_value=FAKE_ARMS)
-def test_list_arms_reports_name_adapter_model_and_prompt_template(mock_load, mock_yaml):
+def test_list_arms_reports_name_adapter_model_and_prompt_template(
+    mock_load, mock_yaml, mock_load_task, mock_active_task
+):
     response = TestClient(app).get("/arms")
     assert response.status_code == 200
     assert response.json() == [

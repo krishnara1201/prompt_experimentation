@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config.arms import load_arms
+from app.config.tasks import active_task_name, load_task
 
 router = APIRouter(prefix="/arms", tags=["arms"])
 
@@ -25,7 +26,8 @@ def list_arms() -> list[ArmInfo]:
     # broken arms.yaml fails here the same way POST /runs would. It drops
     # the adapter-type string, so re-read the raw YAML for that one field.
     try:
-        arms = load_arms(str(ARMS_PATH))
+        task = load_task(active_task_name(str(ARMS_PATH)))
+        arms = load_arms(str(ARMS_PATH), task=task)
         raw = yaml.safe_load(ARMS_PATH.read_text())
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=f"Cannot load arms.yaml: {exc}") from exc

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import yaml
 
@@ -8,6 +9,9 @@ from app.adapters.claude_code_cli import ClaudeCodeCLIAdapter
 from app.adapters.codex_cli import CodexCLIAdapter
 from app.adapters.openai_compatible import OpenAICompatibleAdapter
 from app.eval_prompt import EVAL_PROMPT_TEMPLATE
+
+if TYPE_CHECKING:
+    from app.config.tasks import TaskConfig
 
 
 class UnknownAdapterError(ValueError):
@@ -41,7 +45,14 @@ class Arm:
 
     name: str
     adapter: ModelAdapter
-    prompt_template: str = EVAL_PROMPT_TEMPLATE
+    prompt_template: str | None = None
+
+    def __post_init__(self) -> None:
+        # The field default is None so `load_arms` can tell "unset" from an
+        # explicit template, but a bare `Arm(name, adapter)` (worker, tests)
+        # must keep behaving exactly as before: a concrete template.
+        if self.prompt_template is None:
+            self.prompt_template = EVAL_PROMPT_TEMPLATE
 
     def render(self, text: str) -> str:
         return self.prompt_template.format(text=text)
@@ -61,7 +72,9 @@ def _validate_prompt_template(name: str, template: str) -> None:
         ) from exc
 
 
-def load_arms(config_path: str) -> dict[str, "Arm"]:
+def load_arms(
+    config_path: str, *, task: "TaskConfig | None" = None
+) -> dict[str, "Arm"]:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
 
@@ -82,7 +95,8 @@ def load_arms(config_path: str) -> dict[str, "Arm"]:
         entry = dict(entry)
         name = entry.pop("name")
         adapter_type = entry.pop("adapter")
-        prompt_template = entry.pop("prompt_template", EVAL_PROMPT_TEMPLATE)
+        default_template = task.eval_prompt if task is not None else EVAL_PROMPT_TEMPLATE
+        prompt_template = entry.pop("prompt_template", default_template)
         _validate_prompt_template(name, prompt_template)
 
         adapter_cls = ADAPTER_TYPES.get(adapter_type)
