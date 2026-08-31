@@ -233,6 +233,16 @@ a local model and hosted API models.
    Enabled by two small additions: `OpenAICompatibleAdapter` `extra_body`
    passthrough and a `pe run --task` flag.
 
+   **Judge calibration on financial sentiment with free-text outputs** (run
+   707, `docs/superpowers/reports/2026-08-31-judge-calibration-financial.md`):
+   a `qwen3-fin-explain` arm prompted for prose rationales, 50 rows
+   hand-labeled blind to the judge. κ=1.00 on label-correctness (0 label
+   disagreements / 50), but Spearman only 0.729 — the judge emits a
+   2-value scale (5 or 2), never 3/4, so it agrees on *whether* the label is
+   right but is not a calibrated 1–5 scorer. `scripts/serial_judge_run.py`
+   added as a low-RAM in-process judge fallback (no Celery/Redis).
+   `docs/RESULTS.md` is the external walk-through of all three deliverables.
+
 ## Open decisions
 
 - ~~Confirm hardware~~ **Resolved:** GPU with <16GB VRAM. Local model is

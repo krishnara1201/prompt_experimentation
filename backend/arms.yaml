@@ -62,6 +62,25 @@ arms:
 
       Snippet: {text}
 
+  # Judge-calibration deliverable: qwen3:8b on the financial-sentiment task
+  # but prompted to EXPLAIN its call in prose ("The sentiment is positive
+  # because ...") instead of emitting a bare label. This is what makes the
+  # LLM judge do real interpretation work — it has to read a hedged/verbose
+  # rationale and decide whether the stated sentiment matches the gold label.
+  # Run: pe run -a qwen3-fin-explain -n 60 -r 2 --seed 7
+  - name: qwen3-fin-explain
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+    max_tokens: 512
+    timeout: 600
+    extra_body:
+      reasoning_effort: none
+    prompt_template: |-
+      You are a financial-news analyst. For the sentence below, decide whether its sentiment is positive, negative, or neutral from a financial-news perspective. Write 1-2 sentences explaining your reasoning, and state the sentiment in that explanation. Do not answer with just the label.
+
+      Sentence: {text}
+
   - name: gpt-4o-mini
     adapter: openai_compatible
     base_url: https://api.openai.com/v1
