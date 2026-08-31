@@ -17,7 +17,16 @@ RATIONALE: <one sentence>
 """
 
 
-def render_prompt(input_text: str, gold_label: str, model_output: str) -> str:
-    return RUBRIC_PROMPT_TEMPLATE.format(
-        input_text=input_text, gold_label=gold_label, model_output=model_output
+def render_prompt(
+    input_text: str,
+    gold_label: str,
+    model_output: str,
+    template: str = RUBRIC_PROMPT_TEMPLATE,
+    description: str = "",
+) -> str:
+    return template.format(
+        input_text=input_text,
+        gold_label=gold_label,
+        model_output=model_output,
+        description=description,
     )

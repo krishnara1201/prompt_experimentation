@@ -6,6 +6,9 @@ EvalExample.text is a bare dataset sentence with no task instruction. Left
 unframed, different models guess the implied task with different
 reliability -- the judge rubric (app/judge/rubric.py) assumes the model
 attempted a classification, so the arm has to actually be asked for one.
+
+The EVAL_PROMPT_TEMPLATE below is the default for the financial_sentiment
+task and is per-arm overridable via the Arm's prompt_template field.
 """
 
 EVAL_PROMPT_TEMPLATE = (
@@ -15,5 +18,5 @@ EVAL_PROMPT_TEMPLATE = (
 )
 
 
-def render_eval_prompt(text: str) -> str:
-    return EVAL_PROMPT_TEMPLATE.format(text=text)
+def render_eval_prompt(text: str, template: str = EVAL_PROMPT_TEMPLATE) -> str:
+    return template.format(text=text)

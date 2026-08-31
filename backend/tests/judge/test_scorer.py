@@ -61,3 +61,15 @@ def test_score_output_renders_prompt_and_parses_response():
     result = score_output(adapter, "Profits rose.", "positive", "The tone is positive.")
     assert result.score == 5
     assert result.rationale == "Nailed it."
+
+
+def test_score_output_uses_custom_rubric_template():
+    class _Echo:
+        def generate(self, prompt):
+            from app.adapters.base import ModelResponse
+            assert "TOPIC-RUBRIC" in prompt
+            return ModelResponse(text="SCORE: 5\nRATIONALE: ok", latency_ms=1.0,
+                                 prompt_tokens=1, completion_tokens=1, cost_estimate_usd=None)
+    result = score_output(_Echo(), "in", "World", "out",
+                          rubric_template="TOPIC-RUBRIC {input_text} {gold_label} {model_output}")
+    assert result.score == 5

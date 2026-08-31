@@ -12,3 +12,15 @@ def test_render_prompt_includes_all_fields():
     assert "The tone here is clearly positive." in prompt
     assert "SCORE:" in prompt
     assert "RATIONALE:" in prompt
+
+
+def test_render_prompt_accepts_custom_template():
+    tmpl = "Grading {description}. IN {input_text} GOLD {gold_label} OUT {model_output}"
+    out = render_prompt("x", "pos", "y", template=tmpl, description="a topic task")
+    assert out == "Grading a topic task. IN x GOLD pos OUT y"
+
+
+def test_render_prompt_default_template_unchanged():
+    from app.judge.rubric import RUBRIC_PROMPT_TEMPLATE
+    out = render_prompt("x", "pos", "y")
+    assert out == RUBRIC_PROMPT_TEMPLATE.format(input_text="x", gold_label="pos", model_output="y")

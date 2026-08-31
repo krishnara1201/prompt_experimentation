@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 
 from app.adapters.base import ModelAdapter
-from app.judge.rubric import render_prompt
+from app.judge.rubric import RUBRIC_PROMPT_TEMPLATE, render_prompt
 
 SCORE_PATTERN = re.compile(r"^\s*SCORE:\s*([1-5])\s*$", re.IGNORECASE | re.MULTILINE)
 RATIONALE_PATTERN = re.compile(r"RATIONALE:\s*(.+)", re.IGNORECASE | re.DOTALL)
@@ -34,8 +34,14 @@ def parse_judge_response(text: str) -> JudgeResult:
 
 
 def score_output(
-    adapter: ModelAdapter, input_text: str, gold_label: str, model_output: str
+    adapter: ModelAdapter,
+    input_text: str,
+    gold_label: str,
+    model_output: str,
+    *,
+    rubric_template: str = RUBRIC_PROMPT_TEMPLATE,
+    description: str = "",
 ) -> JudgeResult:
-    prompt = render_prompt(input_text, gold_label, model_output)
+    prompt = render_prompt(input_text, gold_label, model_output, template=rubric_template, description=description)
     response = adapter.generate(prompt)
     return parse_judge_response(response.text)
