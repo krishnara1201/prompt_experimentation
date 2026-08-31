@@ -160,8 +160,48 @@ def test_seed_runs_one_off_migrate_container(captured_argv):
     result = runner.invoke(app, ["seed"])
     assert result.exit_code == 0
     assert captured_argv == [
-        ["docker", "compose", "run", "--rm", "migrate", "uv", "run", "python", "-m", "scripts.seed_eval_examples"]
+        ["docker", "compose", "run", "--rm", "migrate", "uv", "run", "python", "-m",
+         "scripts.seed_eval_examples", "--task", "financial_sentiment"]
     ]
+
+
+def test_seed_task_option_passes_through_to_container(captured_argv):
+    result = runner.invoke(app, ["seed", "--task", "ag_news"])
+    assert result.exit_code == 0
+    assert captured_argv == [
+        ["docker", "compose", "run", "--rm", "migrate", "uv", "run", "python", "-m",
+         "scripts.seed_eval_examples", "--task", "ag_news"]
+    ]
+
+
+@respx.mock
+def test_tasks_lists_packs_from_api():
+    respx.get(f"{BASE}/tasks").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "name": "financial_sentiment",
+                    "description": "a financial-sentiment",
+                    "labels": ["positive", "negative", "neutral"],
+                    "active": True,
+                    "seeded_count": 2264,
+                },
+                {
+                    "name": "ag_news",
+                    "description": "a news-topic classification",
+                    "labels": ["World", "Sports", "Business", "Sci/Tech"],
+                    "active": False,
+                    "seeded_count": 0,
+                },
+            ],
+        )
+    )
+    result = runner.invoke(app, ["tasks"])
+    assert result.exit_code == 0
+    assert "financial_sentiment" in result.stdout
+    assert "ag_news" in result.stdout
+    assert "2264" in result.stdout
 
 
 def test_up_wait_builds_expected_compose_argv(captured_argv, monkeypatch):

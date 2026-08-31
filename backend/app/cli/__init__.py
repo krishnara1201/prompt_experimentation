@@ -65,9 +65,27 @@ def logs(
 
 
 @app.command()
-def seed():
+def seed(
+    task: str = typer.Option("financial_sentiment", "--task", help="Task pack to seed."),
+):
     """Seed the eval dataset (idempotent) via a one-off migrate container."""
-    compose("run", "--rm", "migrate", "uv", "run", "python", "-m", "scripts.seed_eval_examples")
+    compose(
+        "run", "--rm", "migrate", "uv", "run", "python", "-m",
+        "scripts.seed_eval_examples", "--task", task,
+    )
+
+
+@app.command()
+def tasks():
+    """List configured task packs (active marker + seeded row counts)."""
+    rows = api_get("/tasks")
+    _render.table(
+        [
+            {"name": r["name"], "active": "*" if r["active"] else "", "seeded": r["seeded_count"]}
+            for r in rows
+        ],
+        columns=["name", "active", "seeded"],
+    )
 
 
 def _wait_for_api(timeout: float = 60.0) -> None:

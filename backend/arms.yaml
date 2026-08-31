@@ -1,3 +1,7 @@
+# The active evaluation task (a pack under backend/tasks/). Default:
+# financial_sentiment. `pe tasks` lists them; `pe seed --task <name>` seeds one.
+task: financial_sentiment
+
 # Pricing figures below are illustrative — verify against each provider's
 # current pricing page before using cost_estimate_usd for real comparisons.
 arms:

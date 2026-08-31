@@ -34,6 +34,9 @@ services:
       REDIS_BACKEND_URL: redis://redis:6379/1
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./backend/arms.yaml:/app/arms.yaml:ro
+      - ./backend/tasks:/app/tasks:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,6 +47,7 @@ services:
     environment: *backend-env
     volumes: &arms-config
       - ./backend/arms.yaml:/app/arms.yaml:ro
+      - ./backend/tasks:/app/tasks:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
