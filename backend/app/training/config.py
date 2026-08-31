@@ -12,6 +12,7 @@ class InvalidTrainingConfigError(ValueError):
 @dataclass(frozen=True)
 class TrainingConfig:
     run_name: str
+    task: str
     base_model: str
     source_dataset: str
     source_config: str

@@ -3,6 +3,11 @@
 
 run_name: qwen3-8b-finsent-lora
 
+# Which task pack (backend/tasks/<name>/) this fine-tune targets. Its
+# label set + eval prompt drive the SFT records; the leakage guard still
+# checks against every seeded eval_example regardless of task.
+task: financial_sentiment
+
 # HF weights to fine-tune (full/4bit, NOT the Ollama GGUF).
 base_model: unsloth/Qwen3-8B
 

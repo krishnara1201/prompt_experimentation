@@ -18,14 +18,14 @@ from pathlib import Path
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.config.tasks import load_task
 from app.db.models import EvalExample
 from app.db.session import engine
 from app.eval_prompt import render_eval_prompt
 from app.training.config import TrainingConfig
 
-LABEL_NAMES = {0: "negative", 1: "neutral", 2: "positive"}
-_VALID_LABELS = set(LABEL_NAMES.values())
-
+# Financial-specific: only written when the financial source is used. A
+# non-financial task pack would need its own license note (out of scope here).
 LICENSE_TEXT = (
     "Financial PhraseBank (Malo, P., Sinha, A., Korhonen, P., Wallenius, J.,\n"
     "and Takala, P. 2014. 'Good debt or bad debt: Detecting semantic\n"
@@ -67,14 +67,26 @@ def load_source_examples(cfg: TrainingConfig) -> list[tuple[str, str]]:
     """
     from datasets import concatenate_datasets, load_dataset
 
+    task = load_task(cfg.task)
+    valid_labels = set(task.labels)
+    int_to_word = dict(enumerate(task.label_names)) if task.label_names else {}
+
     dataset = load_dataset(cfg.source_dataset, cfg.source_config)
     combined = concatenate_datasets(list(dataset.values()))
     pairs: list[tuple[str, str]] = []
     for row in combined:
         sentence = str(row["sentence"]).replace("\n", " ").strip()
         raw_label = row["label"]
-        label = LABEL_NAMES[int(raw_label)] if isinstance(raw_label, int) else str(raw_label)
-        if label not in _VALID_LABELS:
+        if isinstance(raw_label, int):
+            if not int_to_word:
+                raise ValueError(
+                    f"int label {raw_label!r} in {cfg.source_dataset} but task "
+                    f"'{cfg.task}' task.yaml needs `label_names` to train from this source"
+                )
+            label = int_to_word[int(raw_label)]
+        else:
+            label = str(raw_label)
+        if label not in valid_labels:
             raise ValueError(f"Unexpected label {raw_label!r} in {cfg.source_dataset}")
         pairs.append((sentence, label))
     return pairs
@@ -107,12 +119,15 @@ def _balance_neutral(rows: list[tuple[str, str]], seed: int) -> list[tuple[str, 
     return [row for rows_ in by_label.values() for row in rows_]
 
 
-def _write_jsonl(path: Path, rows: list[tuple[str, str]]) -> None:
+def _write_jsonl(path: Path, rows: list[tuple[str, str]], eval_prompt: str) -> None:
     with path.open("w", encoding="utf-8") as f:
         for sentence, label in rows:
             record = {
                 "messages": [
-                    {"role": "user", "content": render_eval_prompt(sentence)},
+                    {
+                        "role": "user",
+                        "content": render_eval_prompt(sentence, template=eval_prompt),
+                    },
                     {"role": "assistant", "content": label},
                 ]
             }
@@ -120,7 +135,26 @@ def _write_jsonl(path: Path, rows: list[tuple[str, str]]) -> None:
 
 
 def build_sft_dataset(cfg: TrainingConfig) -> DatasetBuildResult:
+    task = load_task(cfg.task)
+    valid_labels = set(task.labels)
+    int_to_word = dict(enumerate(task.label_names)) if task.label_names else {}
+
     source_rows = load_source_examples(cfg)
+    # The real loader already maps int labels to words; this also covers a
+    # monkeypatched / alternative loader that yields raw int labels. String
+    # labels pass straight through unchanged.
+    resolved_rows: list[tuple[str, str]] = []
+    for sentence, label in source_rows:
+        if isinstance(label, int):
+            if not int_to_word:
+                raise ValueError(
+                    f"int label {label!r} from load_source_examples but task "
+                    f"'{cfg.task}' task.yaml has no `label_names` to map it"
+                )
+            label = int_to_word[int(label)]
+        resolved_rows.append((sentence, label))
+    source_rows = resolved_rows
+
     eval_norm = {normalize_sentence(t) for t in fetch_eval_texts()}
 
     kept: list[tuple[str, str]] = []
@@ -151,14 +185,15 @@ def build_sft_dataset(cfg: TrainingConfig) -> DatasetBuildResult:
             "text-normalization mismatch between the two corpora, not a clean split"
         )
 
-    if cfg.balance_neutral:
+    do_balance = cfg.balance_neutral and "neutral" in valid_labels
+    if do_balance:
         kept = _balance_neutral(kept, cfg.seed)
 
     # min_pool_size is checked AFTER balancing -- balancing shrinks the pool,
     # so a pre-balance check could pass while the returned pool_size is below
     # the floor.
     if len(kept) < cfg.min_pool_size:
-        stage = "after neutral balancing" if cfg.balance_neutral else "after leakage drop"
+        stage = "after neutral balancing" if do_balance else "after leakage drop"
         raise LeakageError(
             f"training pool is {len(kept)} rows {stage}, below min_pool_size "
             f"({cfg.min_pool_size}) -- wrong subset or normalization?"
@@ -175,8 +210,8 @@ def build_sft_dataset(cfg: TrainingConfig) -> DatasetBuildResult:
     train_path = out_dir / "train.jsonl"
     val_path = out_dir / "val.jsonl"
     license_path = out_dir / "LICENSE.txt"
-    _write_jsonl(train_path, train_rows)
-    _write_jsonl(val_path, val_rows)
+    _write_jsonl(train_path, train_rows, task.eval_prompt)
+    _write_jsonl(val_path, val_rows, task.eval_prompt)
     license_path.write_text(LICENSE_TEXT, encoding="utf-8")
 
     return DatasetBuildResult(

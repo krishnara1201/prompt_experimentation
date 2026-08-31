@@ -11,6 +11,7 @@ from app.training.config import (
 VALID = textwrap.dedent(
     """
     run_name: demo
+    task: financial_sentiment
     base_model: unsloth/Qwen3-8B
     source_dataset: odedovadia/financial_phrasebank_split
     source_config: default

@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from app.config.tasks import load_task
 from app.eval_prompt import render_eval_prompt
 from app.training import dataset as ds
 from app.training.config import load_training_config
@@ -54,18 +55,47 @@ def test_drops_eval_set_overlap(tmp_path, monkeypatch):
 
 
 def test_record_format_matches_render_eval_prompt(tmp_path, monkeypatch):
-    rows = [("Shares fell 4 percent.", "negative")] + make_rows(2, 2, 2) + [LEAK_ROW]
+    sentence = "Shares fell 4 percent."
+    rows = [(sentence, "negative")] + make_rows(2, 2, 2) + [LEAK_ROW]
     monkeypatch.setattr(ds, "load_source_examples", fake_source(rows))
     monkeypatch.setattr(ds, "fetch_eval_texts", lambda: LEAK_EVAL)
 
     result = ds.build_sft_dataset(cfg(tmp_path, val_fraction=0.0))
     records = [json.loads(l) for l in result.train_path.read_text().splitlines()]
-    rec = next(r for r in records if "Shares fell 4 percent." in r["messages"][0]["content"])
-    assert rec["messages"][0] == {
-        "role": "user",
-        "content": render_eval_prompt("Shares fell 4 percent."),
-    }
+    rec = next(r for r in records if sentence in r["messages"][0]["content"])
+    # Byte-identical to the financial pack's eval prompt (which == the
+    # module default), proving the generalization did not shift the output.
+    expected = render_eval_prompt(
+        sentence, template=load_task("financial_sentiment").eval_prompt
+    )
+    assert rec["messages"][0] == {"role": "user", "content": expected}
     assert rec["messages"][1] == {"role": "assistant", "content": "negative"}
+
+
+def test_build_uses_task_label_names(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    fake_task = SimpleNamespace(
+        labels=("World", "Sports"),
+        label_names=("World", "Sports"),
+        eval_prompt="topic: {text}",
+    )
+    monkeypatch.setattr(ds, "load_task", lambda _name: fake_task)
+    rows = [(f"doc {i}", i % 2) for i in range(8)] + [("leaked doc", 0)]
+    monkeypatch.setattr(ds, "load_source_examples", lambda _cfg: list(rows))
+    monkeypatch.setattr(ds, "fetch_eval_texts", lambda: {"leaked doc"})
+
+    result = ds.build_sft_dataset(cfg(tmp_path, val_fraction=0.0))
+
+    recs = [json.loads(l) for l in result.train_path.read_text().splitlines()]
+    assert recs
+    assert all(r["messages"][1]["content"] in ("World", "Sports") for r in recs)
+    assert all(r["messages"][0]["content"].startswith("topic: ") for r in recs)
+    by_text = {
+        r["messages"][0]["content"]: r["messages"][1]["content"] for r in recs
+    }
+    assert by_text["topic: doc 0"] == "World"
+    assert by_text["topic: doc 1"] == "Sports"
 
 
 def test_pool_below_min_raises(tmp_path, monkeypatch):
