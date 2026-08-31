@@ -218,9 +218,19 @@ a local model and hosted API models.
    so the stats and calibration layers are untouched. Spec:
    `docs/superpowers/specs/2026-08-30-task-agnostic-eval-design.md`; plan:
    `docs/superpowers/plans/2026-08-30-task-agnostic-eval.md`. The AG News
-   pack (`backend/tasks/ag_news/`, 4-class topic classification) ships as
-   the second pack for the Deliverable-2 prompt A/B — report under
-   `docs/superpowers/reports/` once run.
+   pack (`backend/tasks/ag_news/`, 4-class topic classification) is the
+   second pack. **Deliverable 2 executed** (run 559,
+   `docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md`): a prompt
+   A/B on AG News of a terse "just the label" instruction vs. a "reason step
+   by step" one (`ag-news-terse` / `ag-news-cot` in `arms.yaml`, same
+   `qwen3:8b`, `reasoning_effort: none`). Result — **quality is a wash**
+   (77.5% vs 79.1% raw, paired Wilcoxon corrected p=0.37, Bayesian posterior
+   +0.06 with 94% CI inside ±0.2, P(equivalent)=1.00 at ε=0.5) while CoT
+   costs **~40× the output tokens** (p≈2e-21) and ~6× the uncontended
+   latency; the paired test resolves a 1.6-pt gap an unpaired win-rate would
+   misread. Judge calibration for AG News: κ=1.00 vs. hand labels (n=32).
+   Enabled by two small additions: `OpenAICompatibleAdapter` `extra_body`
+   passthrough and a `pe run --task` flag.
 
 ## Open decisions
 

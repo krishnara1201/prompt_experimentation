@@ -30,6 +30,39 @@ arms:
     max_tokens: 1024
     timeout: 600
 
+  # Phase 8 / Deliverable 2: a prompt A/B on the AG News topic-classification
+  # task pack. Same model (qwen3:8b), same `reasoning_effort: none` (Qwen3's
+  # native thinking OFF), differing ONLY in `prompt_template` — so the paired
+  # stats compare a terse "just the label" instruction against a
+  # "reason step by step" one head to head. Run with:
+  #   pe seed --task ag_news
+  #   pe run --task ag_news -a ag-news-terse -a ag-news-cot -n 120 -r 2
+  - name: ag-news-terse
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+    max_tokens: 512
+    timeout: 600
+    extra_body:
+      reasoning_effort: none
+    prompt_template: |-
+      Classify the topic of the news snippet below as exactly one of: World, Sports, Business, Sci/Tech. Answer with only the label.
+
+      Snippet: {text}
+
+  - name: ag-news-cot
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+    max_tokens: 512
+    timeout: 600
+    extra_body:
+      reasoning_effort: none
+    prompt_template: |-
+      Classify the topic of the news snippet below as exactly one of: World, Sports, Business, Sci/Tech. Reason step by step about what the snippet is mainly about, then finish with a final line formatted exactly as 'Label: <one of World, Sports, Business, Sci/Tech>'.
+
+      Snippet: {text}
+
   - name: gpt-4o-mini
     adapter: openai_compatible
     base_url: https://api.openai.com/v1

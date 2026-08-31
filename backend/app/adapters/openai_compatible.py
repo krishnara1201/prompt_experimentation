@@ -16,6 +16,7 @@ class OpenAICompatibleAdapter:
         price_per_1m_output: float | None = None,
         max_tokens: int | None = None,
         timeout: float = 60.0,
+        extra_body: dict | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -24,6 +25,11 @@ class OpenAICompatibleAdapter:
         self.price_per_1m_output = price_per_1m_output
         self.max_tokens = max_tokens
         self.timeout = timeout
+        # Extra request-body keys merged verbatim into every chat-completions
+        # call — e.g. `reasoning_effort: none` to disable a thinking model's
+        # native reasoning so an arm's prompt_template is the only reasoning
+        # driver. Provider-specific; unknown keys are ignored by most.
+        self.extra_body = extra_body or {}
 
     def generate(self, prompt: str) -> ModelResponse:
         api_key = os.environ.get(self.api_key_env) if self.api_key_env else None
@@ -42,6 +48,7 @@ class OpenAICompatibleAdapter:
         }
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
+        payload.update(self.extra_body)
 
         start = time.perf_counter()
         response = httpx.post(

@@ -151,6 +151,43 @@ def test_generate_omits_max_tokens_when_not_configured():
 
 
 @respx.mock
+def test_generate_merges_extra_body_into_request():
+    route = respx.post("http://localhost:11434/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "hi"}}], "usage": {}},
+        )
+    )
+    adapter = OpenAICompatibleAdapter(
+        base_url="http://localhost:11434/v1",
+        model="qwen3:8b",
+        extra_body={"reasoning_effort": "none"},
+    )
+
+    adapter.generate("hello")
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["reasoning_effort"] == "none"
+    assert body["model"] == "qwen3:8b"
+
+
+@respx.mock
+def test_generate_omits_extra_body_keys_when_not_configured():
+    route = respx.post("http://localhost:11434/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "hi"}}], "usage": {}},
+        )
+    )
+    adapter = OpenAICompatibleAdapter(base_url="http://localhost:11434/v1", model="qwen3:8b")
+
+    adapter.generate("hello")
+
+    body = json.loads(route.calls.last.request.content)
+    assert "reasoning_effort" not in body
+
+
+@respx.mock
 def test_generate_sets_finish_reason_from_response():
     respx.post("http://localhost:11434/v1/chat/completions").mock(
         return_value=httpx.Response(

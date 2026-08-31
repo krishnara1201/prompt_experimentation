@@ -46,7 +46,14 @@ every arm still sees the same eval examples, so the paired stats apply
 unchanged. The template must contain `{text}` (the eval-example sentence);
 omit `prompt_template` to use the shared default in `app/eval_prompt.py`.
 `GET /arms` reports each arm's resolved template. Commented example in
-`arms.yaml`.
+`arms.yaml` — plus the live `ag-news-terse` / `ag-news-cot` pair used for
+the executed AG News prompt A/B
+(`docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md`).
+
+An `openai_compatible` arm may also set `extra_body:` — a mapping merged
+verbatim into every chat-completions request. The AG News arms use
+`extra_body: {reasoning_effort: none}` to switch Qwen3's native thinking
+off, so the arm's `prompt_template` is the only thing driving reasoning.
 
 ## Subscription-seat CLI arms (Claude Code, Codex)
 
@@ -169,7 +176,8 @@ uv run pe tasks                       # list packs: name, active (*), seeded cou
 # set the active task — edit backend/arms.yaml, top-level key:
 #   task: <name>
 uv run pe seed --task <name>          # seed its examples
-uv run pe run --sample 50 --repeats 3 # runs now use the active task
+uv run pe run --sample 50 --repeats 3 # runs use the active task
+uv run pe run --task <name> --sample 50 --repeats 3   # ...or override per run
 ```
 
 `backend/tasks/` is bind-mounted into the `api`, `worker`, and `migrate`
@@ -228,7 +236,7 @@ path.
 | `pe seed [--task <name>]` | seed a task's eval examples via a one-off `migrate` container (default: the active task) |
 | `pe tasks` | list task packs: name, active (`*`), seeded count |
 | `pe arms` | list configured arms |
-| `pe run [--sample N] [--repeats N] [--seed N] [--arm A ...] [-q]` | `POST /runs`; `-q` prints only the run id |
+| `pe run [--sample N] [--repeats N] [--seed N] [--arm A ...] [--task NAME] [-q]` | `POST /runs`; `--task` overrides the active task; `-q` prints only the run id |
 | `pe status RUN_ID` / `pe watch RUN_ID` / `pe results RUN_ID` | run status, poll-to-done, per-call rows |
 | `pe stats compare RUN_ID [-m METRIC]` | pairwise paired comparison |
 | `pe stats equivalence RUN_ID --local A --api B [--eps E]` | Bayesian equivalence (judge_score) |

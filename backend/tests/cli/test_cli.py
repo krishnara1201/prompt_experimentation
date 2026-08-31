@@ -46,6 +46,30 @@ def test_run_posts_expected_body():
 
 
 @respx.mock
+def test_run_passes_task_when_given():
+    route = respx.post(f"{BASE}/runs").mock(
+        return_value=httpx.Response(200, json={"run_id": 8, "status": "pending", "total_calls": 4})
+    )
+    result = runner.invoke(app, ["run", "--task", "ag_news", "-a", "ag-news-terse"])
+    assert result.exit_code == 0
+    assert json.loads(route.calls.last.request.content) == {
+        "repeats": 1,
+        "arms": ["ag-news-terse"],
+        "task": "ag_news",
+    }
+
+
+@respx.mock
+def test_run_omits_task_when_not_given():
+    route = respx.post(f"{BASE}/runs").mock(
+        return_value=httpx.Response(200, json={"run_id": 9, "status": "pending", "total_calls": 4})
+    )
+    result = runner.invoke(app, ["run"])
+    assert result.exit_code == 0
+    assert "task" not in json.loads(route.calls.last.request.content)
+
+
+@respx.mock
 def test_run_quiet_prints_only_id():
     respx.post(f"{BASE}/runs").mock(
         return_value=httpx.Response(200, json={"run_id": 12, "status": "pending", "total_calls": 4})

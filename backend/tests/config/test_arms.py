@@ -149,6 +149,25 @@ def test_load_arms_passes_config_fields_through(tmp_path):
     assert hosted.price_per_1m_output == 0.60
 
 
+def test_load_arms_passes_extra_body_through_to_openai_compatible_adapter(tmp_path):
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(
+        """
+arms:
+  - name: qwen3-no-think
+    adapter: openai_compatible
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b
+    extra_body:
+      reasoning_effort: none
+"""
+    )
+
+    arms = load_arms(str(config_path))
+
+    assert arms["qwen3-no-think"].adapter.extra_body == {"reasoning_effort": "none"}
+
+
 def test_load_arms_passes_config_fields_through_for_subscription_cli_arms(tmp_path):
     config_path = tmp_path / "arms.yaml"
     config_path.write_text(VALID_CONFIG)

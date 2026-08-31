@@ -118,6 +118,7 @@ def run(
     repeats: int = typer.Option(1, "--repeats", "-r", help="Repeats per example per arm."),
     seed: int = typer.Option(None, "--seed", help="RNG seed for the sample."),
     arm: list[str] = typer.Option(None, "--arm", "-a", help="Arm name; repeatable (default: all arms)."),
+    task: str = typer.Option(None, "--task", help="Task pack to run against (default: the active task in arms.yaml)."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Print only the new run id."),
 ):
     """Start a run."""
@@ -128,6 +129,8 @@ def run(
         body["seed"] = seed
     if arm:
         body["arms"] = arm
+    if task is not None:
+        body["task"] = task
     result = api_post("/runs", body)
     if quiet:
         typer.echo(result["run_id"])
