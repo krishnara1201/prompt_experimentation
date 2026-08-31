@@ -1,10 +1,15 @@
 """End-to-end dry run of the Phase 6 agent-facing judge tool.
 
 Unlike ``app/demo.py`` (which exercises the eval *arms*), this drives the
-real MCP server over stdio exactly as an MCP client would: it spawns
-``app.mcp_judge_server``, lists its tools, then calls
-``score_financial_sentiment`` on a stratified handful of real Financial
+real MCP server (``rubric-judge``) over stdio exactly as an MCP client
+would: it spawns ``app.mcp_judge_server``, lists its tools, then calls
+``score_output_against_gold`` on a stratified handful of real Financial
 PhraseBank sentences plus a few inputs that should be rejected.
+
+The tool contract is now task-agnostic (it scores against whatever task
+``arms.yaml`` names as active), but this smoke test stays a financial one:
+it uses the ``financial_sentiment`` task pack's own eval prompt and label
+set, and reads rows from the vendored Financial PhraseBank subset.
 
 Nothing is written to Postgres -- this is a disposable check that the whole
 path (MCP transport -> arms.yaml judge config -> judge model -> rubric
@@ -33,7 +38,9 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from app.config.arms import load_arms
+from app.config.tasks import DEFAULT_TASK, load_task
 from app.data.financial_phrasebank import PhrasebankExample, load_examples
+from app.eval_prompt import render_eval_prompt
 
 DATA_PATH = (
     Path(__file__).resolve().parent.parent
@@ -42,22 +49,29 @@ DATA_PATH = (
     / "sentences_allagree.txt"
 )
 ARMS_PATH = Path(__file__).resolve().parent.parent / "arms.yaml"
-TOOL_NAME = "score_financial_sentiment"
-LABELS = ("positive", "negative", "neutral")
+TOOL_NAME = "score_output_against_gold"
+
+_TASK = load_task(DEFAULT_TASK)
+LABELS = tuple(_TASK.labels)
+_NOT_A_LABEL = next(
+    candidate
+    for candidate in ("not-a-label", "bullish", "xxx", "__none__")
+    if candidate not in LABELS
+)
 
 # Inputs the tool must reject before making a judge call.
 NEGATIVE_CASES = [
     {
         "label": "blank input_text",
-        "args": {"input_text": "   ", "gold_label": "positive", "model_output": "Positive."},
+        "args": {"input_text": "   ", "gold_label": LABELS[0], "model_output": "Positive."},
     },
     {
         "label": "blank model_output",
-        "args": {"input_text": "Profits rose.", "gold_label": "positive", "model_output": ""},
+        "args": {"input_text": "Profits rose.", "gold_label": LABELS[0], "model_output": ""},
     },
     {
         "label": "out-of-domain gold_label",
-        "args": {"input_text": "Profits rose.", "gold_label": "bullish", "model_output": "Up."},
+        "args": {"input_text": "Profits rose.", "gold_label": _NOT_A_LABEL, "model_output": "Up."},
     },
 ]
 
@@ -91,11 +105,10 @@ def sample_by_label(
 
 
 def classify_prompt(sentence: str) -> str:
-    return (
-        "Classify the financial sentiment of the following sentence as "
-        "positive, negative, or neutral, then explain in one sentence.\n\n"
-        f"Sentence: {sentence}"
-    )
+    """The candidate prompt handed to the eval arm -- the active task pack's
+    own eval prompt, so the dryrun asks the arm exactly what a real run
+    would."""
+    return render_eval_prompt(sentence, template=_TASK.eval_prompt)
 
 
 def synthetic_output(example: PhrasebankExample, wrong: bool) -> str:

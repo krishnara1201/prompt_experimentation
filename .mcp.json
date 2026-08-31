@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "financial-sentiment-judge": {
+    "rubric-judge": {
       "command": "uv",
       "args": ["run", "--directory", "backend", "python", "-m", "app.mcp_judge_server"]
     }

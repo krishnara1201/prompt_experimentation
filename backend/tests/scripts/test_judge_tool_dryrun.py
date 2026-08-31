@@ -3,9 +3,14 @@ import pytest
 from app.data.financial_phrasebank import PhrasebankExample
 from scripts.judge_tool_dryrun import (
     NEGATIVE_CASES,
+    TOOL_NAME,
     format_row,
     sample_by_label,
 )
+
+
+def test_tool_name_is_the_generalised_judge_tool():
+    assert TOOL_NAME == "score_output_against_gold"
 
 
 def _examples() -> list[PhrasebankExample]:
