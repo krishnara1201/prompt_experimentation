@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { createRun, fetchArms, fetchTasks } from '../api/client';
@@ -17,7 +17,7 @@ export function NewRunForm() {
   const [repeats, setRepeats] = useState('1');
   const [seed, setSeed] = useState('');
   const [selectedArms, setSelectedArms] = useState<string[]>([]);
-  const [task, setTask] = useState<string>('');
+  const [taskOverride, setTaskOverride] = useState<string>('');
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -25,11 +25,11 @@ export function NewRunForm() {
   const armsQuery = useQuery({ queryKey: ['arms'], queryFn: fetchArms, enabled: open });
   const tasksQuery = useQuery({ queryKey: ['tasks'], queryFn: fetchTasks, enabled: open });
 
-  useEffect(() => {
-    if (task !== '' || !tasksQuery.data) return;
-    const active = tasksQuery.data.find((t) => t.active) ?? tasksQuery.data[0];
-    if (active) setTask(active.name);
-  }, [task, tasksQuery.data]);
+  // Derived at render (no effect): the user's explicit pick wins, otherwise
+  // default to the active task, otherwise the first one.
+  const defaultTask =
+    tasksQuery.data?.find((t) => t.active)?.name ?? tasksQuery.data?.[0]?.name ?? '';
+  const task = taskOverride || defaultTask;
 
   const selectedTask = tasksQuery.data?.find((t) => t.name === task);
   const taskNotSeeded = selectedTask !== undefined && selectedTask.seeded_count === 0;
@@ -91,7 +91,7 @@ export function NewRunForm() {
         {tasksQuery.data && (
           <select
             value={task}
-            onChange={(e) => setTask(e.target.value)}
+            onChange={(e) => setTaskOverride(e.target.value)}
             className="mt-1 w-full rounded border px-2 py-1"
           >
             {tasksQuery.data.map((t) => (
