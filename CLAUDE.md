@@ -40,9 +40,14 @@ a local model and hosted API models.
                -> [LLM-as-judge, calibrated] -> [stats analysis + dashboard]
 ```
 
-- **Eval dataset** — a public financial sentiment benchmark (Financial
-  PhraseBank or FiQA): labeled, sentence-level, expert-agreement sentiment.
-  Avoids building/labeling a gold set from scratch.
+- **Eval dataset** — one *task pack* among others (Phase 8). A task is a
+  directory under `backend/tasks/<name>/`: a `task.yaml` (label set, default
+  eval prompt, judge rubric, data-file pointer) plus a data file (vendored
+  `.txt`/`.jsonl`). `arms.yaml`'s top-level `task:` key selects the active
+  one; the default `financial_sentiment` pack is byte-identical to the
+  former hardcoded behaviour — a public financial sentiment benchmark
+  (Financial PhraseBank), labeled, sentence-level, expert-agreement. Bring
+  your own eval = drop in a JSONL file + a `task.yaml`, no code change.
 - **Model arms** — four adapter implementations behind a shared `ModelAdapter`
   protocol, not one per provider: `OpenAICompatibleAdapter` (any provider
   speaking the OpenAI chat-completions schema — Ollama, OpenAI, OpenRouter,
@@ -62,7 +67,8 @@ a local model and hosted API models.
     for GPT-4o-mini and Claude Haiku, but any OpenAI-schema or Anthropic
     provider works without code changes.
   - **Prompts are arms too.** An arm carries an optional `prompt_template`
-    (must contain `{text}`; defaults to `app/eval_prompt.py`). Two arms with
+    (must contain `{text}`; when unset it falls back to the active task's
+    `eval_prompt`, itself defaulting to `app/eval_prompt.py`). Two arms with
     the same model but different templates A/B the prompts — the paired
     stats apply unchanged. `config/arms.py` wraps each adapter in an `Arm`
     (`name`, `adapter`, `prompt_template`); `GET /arms` reports the resolved
@@ -71,8 +77,10 @@ a local model and hosted API models.
   as async jobs. Reuse the async job pattern from `experimentation_copilot`.
 - **Results store** — Postgres: raw prompts, outputs, judge scores, latency,
   token counts, per-call cost estimate.
-- **Judge layer** — LLM-as-judge with a fixed rubric prompt, calibrated
-  against a hand-labeled gold subset before being trusted on the full run.
+- **Judge layer** — LLM-as-judge with a fixed rubric prompt (now supplied
+  per-task by the active task pack; still a fixed integer 1–5 score, so the
+  stats/calibration layers are unchanged), calibrated against a hand-labeled
+  gold subset before being trusted on the full run.
 - **Stats layer** — paired significance tests (bootstrap CI, Wilcoxon
   signed-rank), Bayesian posterior comparison between arms, multiple-
   comparison correction across arm pairs, sample-size/power calculator.
@@ -82,10 +90,12 @@ a local model and hosted API models.
   `POST /runs`), not only via `curl`.
 - **`pe` CLI** — `backend/app/cli/`, console entrypoint (`uv run pe …`
   from `backend/`). One command over the whole loop: `docker compose`
-  lifecycle (`up`/`down`/`logs`/`seed`), runs (`run`/`status`/`watch`/
-  `results`/`arms`) and stats (`stats compare|equivalence|power`) over
-  HTTP, and the host-side calibration scripts (`calibrate
-  select|import|report`). `scripts/demo.sh` chains it end to end. Spec:
+  lifecycle (`up`/`down`/`logs`/`seed [--task <name>]`), task packs
+  (`tasks` — list packs, active flag, seeded counts), runs
+  (`run`/`status`/`watch`/`results`/`arms`) and stats
+  (`stats compare|equivalence|power`) over HTTP, and the host-side
+  calibration scripts (`calibrate select|import|report`). `scripts/demo.sh`
+  chains it end to end. Spec:
   `docs/superpowers/specs/2026-08-29-cli-and-dashboard-run-design.md`.
 
 ## Tech stack
@@ -191,6 +201,27 @@ a local model and hosted API models.
    land — a `gemini-flash` arm was added but Google's free tier rate-limited
    130/150 calls (HTTP 429); a paid key or a throttled re-run is still needed.
 
+8. **Task-agnostic eval** ✅ **Done.** The eval loop is no longer hardwired
+   to financial sentiment: a task is a pack under `backend/tasks/<name>/`
+   (`task.yaml` + a `.txt`/`.jsonl` data file) declaring the label set, the
+   default eval prompt, and the judge rubric (`backend/app/config/tasks.py`
+   loads/validates it; `backend/app/data/loader.py` reads JSONL packs).
+   `arms.yaml`'s `task:` key selects the active pack (default
+   `financial_sentiment`, byte-identical to the old behaviour); `Run.task`
+   (migration `0003`) records it per run and it is threaded through the
+   worker's call + judge tasks. `POST /runs` takes an optional `task`,
+   samples only that task's seeded examples, and 422s on an unknown one;
+   `GET /tasks`, `pe tasks`, and `pe seed --task` expose packs; the New Run
+   form has a task dropdown. The MCP judge server (now `rubric-judge`, tool
+   `score_output_against_gold`) and the QLoRA training dataset builder both
+   read the active/configured task. Score scale stays a fixed integer 1–5
+   so the stats and calibration layers are untouched. Spec:
+   `docs/superpowers/specs/2026-08-30-task-agnostic-eval-design.md`; plan:
+   `docs/superpowers/plans/2026-08-30-task-agnostic-eval.md`. The AG News
+   pack (`backend/tasks/ag_news/`, 4-class topic classification) ships as
+   the second pack for the Deliverable-2 prompt A/B — report under
+   `docs/superpowers/reports/` once run.
+
 ## Open decisions
 
 - ~~Confirm hardware~~ **Resolved:** GPU with <16GB VRAM. Local model is
@@ -212,9 +243,11 @@ a local model and hosted API models.
   anything derived from it. The root README's "Data & license" section
   carries the Malo et al. 2014 citation and the CC BY-NC-SA 3.0 /
   non-commercial notice. The calibration gold subset stores row IDs +
-  human labels (not redistributed source text). The dataset stays a
-  swap-in point (not hardwired into the stats/judge layers) so a
-  commercial user can substitute a permissively-licensed sentiment set.
+  human labels (not redistributed source text). The dataset swap-in is now
+  concrete (Phase 8): it is a task pack, not just an aspiration — a
+  commercial user substitutes a permissively-licensed set by adding a
+  `task.yaml` + JSONL under `backend/tasks/` and pointing `arms.yaml`
+  `task:` at it, no code change.
 - ~~Confirm Bayesian library/approach~~ **Resolved:** PyMC (Phase 4, done).
   `experimentation_copilot/backend/app/stats/stat_analysis.py` was purely
   frequentist with no existing Bayesian code to reuse, so this was a fresh

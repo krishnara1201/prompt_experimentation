@@ -119,11 +119,14 @@ uv run alembic upgrade head
 
 ### 3. Seed the eval dataset
 
-Loads the vendored Financial PhraseBank all-agree sentences into
-`eval_example`. Idempotent — safe to re-run.
+Loads the active task's examples into `eval_example` (default: the vendored
+Financial PhraseBank all-agree sentences). Idempotent per task `source` —
+safe to re-run, and seeding a second task adds to the table rather than
+replacing.
 
 ```bash
-uv run python -m scripts.seed_eval_examples
+uv run python -m scripts.seed_eval_examples             # active task (financial_sentiment)
+uv run python -m scripts.seed_eval_examples --task ag_news
 ```
 
 If you are running everything through Docker Compose instead, seed with a
@@ -131,8 +134,49 @@ one-off container against the same image (seeding is a one-time idempotent
 operation, not a service, so there is no `seed` service in the compose file):
 
 ```bash
-docker compose run --rm migrate uv run python -m scripts.seed_eval_examples
+docker compose run --rm migrate uv run python -m scripts.seed_eval_examples --task financial_sentiment
 ```
+
+### Bring your own task
+
+The eval loop is task-agnostic (Phase 8). A **task pack** is a directory
+under `backend/tasks/<name>/` with two things:
+
+```
+backend/tasks/<name>/
+  task.yaml       # config: labels, eval prompt, judge rubric, data pointer
+  data.jsonl      # {"text": "...", "gold_label": "<one of labels>"} per line
+```
+
+`task.yaml` schema:
+
+| key | meaning |
+| --- | --- |
+| `name` | must match the directory name |
+| `description` | short noun phrase, interpolated into the rubric as `{description}` |
+| `labels` | the full label set; every `gold_label` in the data must be one of these |
+| `label_names` | optional — human names for integer labels (HF-style `0/1/2` data); same set as `labels` |
+| `source` | the `eval_example.source` tag rows are seeded under (keeps tasks disjoint in one DB) |
+| `format` | `jsonl` (bring-your-own) or `phrasebank` (the vendored loader) |
+| `data` | path to the data file, relative to `task.yaml` |
+| `eval_prompt` | default prompt for arms that don't set their own `prompt_template`; must contain `{text}` |
+| `rubric` | judge rubric; must contain `{input_text}`, `{gold_label}`, `{model_output}` (`{description}` optional). Judge still returns a fixed integer **1–5**, so the stats and calibration layers are unchanged. |
+
+Then:
+
+```bash
+uv run pe tasks                       # list packs: name, active (*), seeded count
+# set the active task — edit backend/arms.yaml, top-level key:
+#   task: <name>
+uv run pe seed --task <name>          # seed its examples
+uv run pe run --sample 50 --repeats 3 # runs now use the active task
+```
+
+`backend/tasks/` is bind-mounted into the `api`, `worker`, and `migrate`
+containers (`docker-compose.yml`), so you can add or edit a pack without
+rebuilding the image. `POST /runs` also takes an optional `task` to override
+the active one per run. Shipped packs: `financial_sentiment` (default),
+`ag_news` (4-class news-topic classification).
 
 ### 4. Start the Celery worker
 
@@ -154,9 +198,10 @@ postgres, redis, migrations, the API on `:8000`, and the worker).
 | Endpoint | Description |
 | --- | --- |
 | `GET /health` | Liveness/readiness probe: `200 {"status": "ok", "database": "ok"}` when a trivial DB query succeeds, `503 {"status": "error", "database": "unreachable"}` otherwise. Used by the compose `api` healthcheck and the `pe` CLI readiness poll. |
-| `POST /runs` | Create a run: picks the examples (optionally a seeded `sample_size` sample), fans out one Celery task per example × arm × repeat, returns `run_id` and `total_calls`. Body: `arms` (defaults to every arm in `arms.yaml`), `sample_size`, `repeats`, `seed`. |
-| `GET /runs/{run_id}` | Run status — derived from persisted results: `pending`, `running`, `completed`, or `completed_with_errors`, plus completed/failed/pending counts. |
+| `POST /runs` | Create a run: samples only the active (or body-specified) task's seeded examples, fans out one Celery task per example × arm × repeat, returns `run_id` and `total_calls`. Body: `arms` (defaults to every arm in `arms.yaml`), `sample_size`, `repeats`, `seed`, `task` (defaults to `arms.yaml`'s `task:`; 422 if unknown, 400 if that task has no seeded examples). |
+| `GET /runs/{run_id}` | Run status — derived from persisted results: `pending`, `running`, `completed`, or `completed_with_errors`, plus completed/failed/pending counts and the run's `task`. |
 | `GET /runs/{run_id}/results` | Per-call rows for a run (output text, latency, tokens, cost, error), paginated with `limit` and `offset`. |
+| `GET /tasks` | Configured task packs: `name`, `description`, `labels`, `active` (matches `arms.yaml` `task:`), `seeded_count`. |
 
 Example:
 
@@ -180,7 +225,8 @@ path.
 | Command | What it does |
 | --- | --- |
 | `pe up [--no-wait]` / `pe down [-v]` / `pe logs [svc] [-f]` | `docker compose` lifecycle |
-| `pe seed` | seed the eval dataset via a one-off `migrate` container |
+| `pe seed [--task <name>]` | seed a task's eval examples via a one-off `migrate` container (default: the active task) |
+| `pe tasks` | list task packs: name, active (`*`), seeded count |
 | `pe arms` | list configured arms |
 | `pe run [--sample N] [--repeats N] [--seed N] [--arm A ...] [-q]` | `POST /runs`; `-q` prints only the run id |
 | `pe status RUN_ID` / `pe watch RUN_ID` / `pe results RUN_ID` | run status, poll-to-done, per-call rows |
@@ -261,10 +307,11 @@ Prints Spearman correlation and Cohen's kappa (score >= 4 treated as
 ## Phase 6: Agent-facing judge tool
 
 Exposes the judge layer (Phase 3) as an MCP tool so a coding agent (e.g. a
-Claude Code session iterating on a prompt) can score one candidate
-financial-sentiment response against a gold label directly — no eval run,
-no Celery, no Postgres. It calls the same rubric and `judge:` config as the
-automated pipeline.
+Claude Code session iterating on a prompt) can score one candidate response
+against a gold label directly — no eval run, no Celery, no Postgres. It
+calls the **active task's** rubric and the `judge:` config from the
+automated pipeline; `gold_label` is validated against that task's label set
+before any judge call.
 
 ### 1. Make the tool available
 
@@ -272,14 +319,14 @@ For **Claude Code opened in this repo**, nothing to do — the repo-root
 `.mcp.json` registers the server automatically (approve it at the
 project-scoped-server prompt the first time). Check it loaded with
 `/mcp`; the tool appears as
-`mcp__financial-sentiment-judge__score_financial_sentiment`.
+`mcp__rubric-judge__score_output_against_gold`.
 
 For **Codex CLI**, the repo-root `.mcp.json` is not picked up (that's a
 Claude Code convention) — register the server in `~/.codex/config.toml`
 with an **absolute** path to `backend`:
 
 ```toml
-[mcp_servers.financial-sentiment-judge]
+[mcp_servers.rubric-judge]
 command = "uv"
 args = ["run", "--directory", "/abs/path/to/prompt_experimentation/backend", "python", "-m", "app.mcp_judge_server"]
 ```
@@ -309,11 +356,11 @@ crash.
 ### 2. Call the tool
 
 ```
-score_financial_sentiment(
-    input_text:   str,   # the sentence that was classified
-    gold_label:   str,   # "positive" | "negative" | "neutral"
+score_output_against_gold(
+    input_text:   str,   # the item that was classified
+    gold_label:   str,   # must be one of the active task's labels
     model_output: str,   # the candidate response being graded
-) -> {"score": 1-5, "rationale": str, "judge_model": str}
+) -> {"score": 1-5, "rationale": str, "judge_model": str, "task": str}
 ```
 
 Example call and response:
@@ -329,11 +376,14 @@ Example call and response:
 {
   "score": 5,
   "rationale": "The response correctly identifies the sentiment as negative, states it directly, and grounds it in the guidance cut and share price drop.",
-  "judge_model": "opus"
+  "judge_model": "opus",
+  "task": "financial_sentiment"
 }
 ```
 
-The 1-5 scale (reference-guided against `gold_label`):
+The 1-5 scale (reference-guided against `gold_label`; wording below is the
+`financial_sentiment` rubric — another task pack supplies its own rubric but
+the same fixed integer 1–5 scale):
 
 | Score | Meaning |
 |-------|---------|
@@ -409,7 +459,7 @@ iterating on its prompt (real responses, with the judge configured as
 `claude_code_cli` / `opus`):
 
 ```
-> score_financial_sentiment(
+> score_output_against_gold(
     input_text="Nokia's Q3 net sales rose 9% year-on-year to EUR 5.7bn, beating estimates.",
     gold_label="positive",
     model_output="This is positive sentiment. Sales grew 9% and exceeded analyst expectations.")
@@ -420,7 +470,7 @@ iterating on its prompt (real responses, with the judge configured as
                   justification.",
     "judge_model": "opus" }
 
-> score_financial_sentiment(
+> score_output_against_gold(
     input_text="The company said it will cut 1,200 jobs and close two factories as demand slumps.",
     gold_label="negative",
     model_output="Positive — restructuring will make the company leaner and more efficient.")
@@ -431,7 +481,7 @@ iterating on its prompt (real responses, with the judge configured as
                   closures, and slumping demand.",
     "judge_model": "opus" }
 
-> score_financial_sentiment(
+> score_output_against_gold(
     input_text="The company will hold its annual general meeting on 25 March in Helsinki.",
     gold_label="neutral",
     model_output="Neutral. This is a factual scheduling announcement with no financial implication.")
