@@ -12,15 +12,7 @@ import {
 } from 'recharts';
 import { fetchRunSummary } from '../api/client';
 import { QueryState } from './QueryState';
-
-interface FrontierPoint {
-  arm_name: string;
-  cost: number;
-  quality: number;
-  latency: number;
-  noCost: boolean;
-  noQuality: boolean;
-}
+import { toFrontierPoints, type FrontierPoint } from './frontier';
 
 export function FrontierChart({ runId }: { runId: number }) {
   const { data, isLoading, error, refetch } = useQuery({
@@ -28,14 +20,7 @@ export function FrontierChart({ runId }: { runId: number }) {
     queryFn: () => fetchRunSummary(runId),
   });
 
-  const points: FrontierPoint[] = (data ?? []).map((row) => ({
-    arm_name: row.arm_name,
-    cost: row.mean_cost_estimate_usd ?? 0,
-    quality: row.mean_judge_score ?? 0,
-    latency: row.mean_latency_ms ?? 0,
-    noCost: row.mean_cost_estimate_usd === null,
-    noQuality: row.mean_judge_score === null,
-  }));
+  const points: FrontierPoint[] = toFrontierPoints(data ?? []);
 
   return (
     <QueryState isLoading={isLoading} error={error} onRetry={refetch}>
