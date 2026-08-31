@@ -7,10 +7,9 @@ task: financial_sentiment
 arms:
   - name: qwen3-8b-local
     adapter: openai_compatible
-    # localhost is correct for the non-Docker flow and for anyone else's
-    # Docker setup. Running under Docker Compose? Ollama isn't containerized
-    # — override this to host.docker.internal (or your host IP) in your
-    # local working tree only, don't commit it. See the repo-root README.
+    # localhost is correct for the non-Docker flow. Running under Docker?
+    # Don't edit this — set OLLAMA_BASE_URL in .env instead (it redirects
+    # every local-Ollama arm/judge below). See the repo-root README.
     base_url: http://localhost:11434/v1
     model: qwen3:8b
     max_tokens: 1024

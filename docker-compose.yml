@@ -34,6 +34,11 @@ services:
       REDIS_BACKEND_URL: redis://redis:6379/1
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Redirects any arms.yaml arm/judge pointed at a local Ollama
+      # (localhost/127.0.0.1:11434) to this URL, so a Docker/WSL2 host that
+      # can't reach Ollama via `localhost` sets it here instead of editing
+      # (and not committing) arms.yaml. See backend/.env.example.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
     volumes:
       - ./backend/arms.yaml:/app/arms.yaml:ro
       - ./backend/tasks:/app/tasks:ro

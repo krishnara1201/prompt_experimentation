@@ -114,6 +114,75 @@ arms:
 """
 
 
+OLLAMA_127_CONFIG = """
+arms:
+  - name: qwen3-8b-local
+    adapter: openai_compatible
+    base_url: http://127.0.0.1:11434/v1
+    model: qwen3:8b
+"""
+
+OLLAMA_JUDGE_CONFIG = (
+    VALID_CONFIG
+    + """
+judge:
+  adapter: openai_compatible
+  base_url: http://localhost:11434/v1
+  model: qwen3:8b
+"""
+)
+
+
+def test_load_arms_applies_ollama_base_url_override_to_localhost_arm(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://172.30.0.127:11434/v1")
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(VALID_CONFIG)
+
+    arms = load_arms(str(config_path))
+
+    assert arms["qwen3-8b-local"].adapter.base_url == "http://172.30.0.127:11434/v1"
+
+
+def test_load_arms_ollama_override_matches_127_0_0_1_host(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434/v1")
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(OLLAMA_127_CONFIG)
+
+    arms = load_arms(str(config_path))
+
+    assert arms["qwen3-8b-local"].adapter.base_url == "http://host.docker.internal:11434/v1"
+
+
+def test_load_arms_ollama_override_leaves_non_ollama_arms_untouched(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://172.30.0.127:11434/v1")
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(VALID_CONFIG)
+
+    arms = load_arms(str(config_path))
+
+    assert arms["gpt-4o-mini"].adapter.base_url == "https://api.openai.com/v1"
+
+
+def test_load_arms_no_ollama_override_when_env_unset(tmp_path, monkeypatch):
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(VALID_CONFIG)
+
+    arms = load_arms(str(config_path))
+
+    assert arms["qwen3-8b-local"].adapter.base_url == "http://localhost:11434/v1"
+
+
+def test_load_judge_arm_applies_ollama_base_url_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://172.30.0.127:11434/v1")
+    config_path = tmp_path / "arms.yaml"
+    config_path.write_text(OLLAMA_JUDGE_CONFIG)
+
+    judge = load_judge_arm(str(config_path))
+
+    assert judge.base_url == "http://172.30.0.127:11434/v1"
+
+
 def test_load_arms_builds_correct_adapter_types(tmp_path):
     config_path = tmp_path / "arms.yaml"
     config_path.write_text(VALID_CONFIG)

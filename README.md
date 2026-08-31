@@ -88,28 +88,35 @@ in its environment and restart it (on a systemd host: a
 `backend/arms.yaml`'s `qwen3-8b-local` entry ships pointed at
 `http://localhost:11434/v1` for the non-Docker default flow (see
 `backend/README.md`); that doesn't resolve to the host from inside a
-container, so it needs to change for Docker use. Try
-`http://host.docker.internal:11434/v1` first — it works on most Docker
-Desktop setups. If calls still fail with `Connection refused` (seen on at
-least one Docker Desktop + WSL2 setup, where `host.docker.internal`
-reaches a gateway that refuses the connection even though Windows' own
-`localhost:11434` forwarding works), fall back to the IP of the WSL
-distro's `eth0` interface instead (`ip addr show eth0 | grep inet`) — that
-address isn't guaranteed stable across a `wsl --shutdown`/reboot, so
-re-check it if connectivity breaks later.
+container. **Don't edit `arms.yaml` for this** — set `OLLAMA_BASE_URL` in
+`.env` instead. It redirects every arm/judge pointed at a local Ollama
+(`localhost` or `127.0.0.1` on `:11434`) to the given URL, leaving
+`arms.yaml` on `localhost` for everyone else and matching hosted providers
+on the same adapter (OpenAI, Gemini) by host so they're untouched:
 
-Don't commit whichever address you land on — `localhost` is correct for
-the non-Docker flow and for anyone else's Docker setup, so a machine- or
-platform-specific override belongs in your local working tree only.
+```bash
+# .env
+OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
+```
 
-`arms.yaml` is bind-mounted read-only into `api`/`worker`, so editing it
-doesn't need an image rebuild — but on Docker Desktop + WSL2, editing the
-file *while the containers are running* can leave them holding onto the
-old content: many editors and CLI tools replace a file by writing a new
-one and renaming over it, and the bind mount can end up pinned to the old,
-now-unlinked inode instead of the current filename. If a container's
-`/app/arms.yaml` doesn't reflect a change you made, don't rely on
-`docker compose restart` — recreate it instead:
+Try `host.docker.internal` first — it works on most Docker Desktop setups.
+If calls still fail with `Connection refused` (seen on at least one Docker
+Desktop + WSL2 setup, where `host.docker.internal` reaches a gateway that
+refuses the connection even though Windows' own `localhost:11434`
+forwarding works), use the IP of the WSL distro's `eth0` interface instead
+(`ip addr show eth0 | grep inet`) — that address isn't guaranteed stable
+across a `wsl --shutdown`/reboot, so re-check it if connectivity breaks
+later. `OLLAMA_BASE_URL` is read from the environment on every config load,
+so changing it only needs a `docker compose up -d` (no `arms.yaml` edit, no
+rebuild).
+
+`arms.yaml` is bind-mounted read-only into `api`/`worker`, so *other* edits
+(adding an arm, changing a prompt) don't need an image rebuild — but on
+Docker Desktop + WSL2, editing it *while the containers are running* can
+leave them pinned to the old file (many editors write-then-rename, and the
+bind mount follows the now-unlinked inode). If a container's
+`/app/arms.yaml` doesn't reflect your change, recreate it rather than
+`docker compose restart`:
 
 ```bash
 docker compose up -d --force-recreate api worker

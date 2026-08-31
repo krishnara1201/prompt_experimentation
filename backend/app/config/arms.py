@@ -1,5 +1,7 @@
+import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -58,6 +60,31 @@ class Arm:
         return self.prompt_template.format(text=text)
 
 
+_OLLAMA_LOCAL_HOSTS = {"localhost:11434", "127.0.0.1:11434"}
+
+
+def _apply_ollama_base_url_override(entry: dict) -> dict:
+    """If $OLLAMA_BASE_URL is set, redirect any openai_compatible entry that
+    points at a local Ollama (localhost/127.0.0.1 on :11434) to it.
+
+    Lets a Docker/WSL2 setup, where the container can't reach the host's
+    Ollama via `localhost`, override the URL from the environment instead of
+    hand-editing (and not committing) `arms.yaml`. Non-local base_urls —
+    hosted providers on the same adapter — are matched by host and left
+    alone.
+    """
+    override = os.environ.get("OLLAMA_BASE_URL")
+    if not override or entry.get("adapter") != "openai_compatible":
+        return entry
+    base_url = entry.get("base_url")
+    if not base_url:
+        return entry
+    if urlsplit(base_url).netloc in _OLLAMA_LOCAL_HOSTS:
+        entry = dict(entry)
+        entry["base_url"] = override
+    return entry
+
+
 def _validate_prompt_template(name: str, template: str) -> None:
     if "{text}" not in template:
         raise InvalidArmConfigError(
@@ -92,7 +119,7 @@ def load_arms(
                 f"arm '{entry['name']}' is missing required key 'adapter'"
             )
 
-        entry = dict(entry)
+        entry = _apply_ollama_base_url_override(dict(entry))
         name = entry.pop("name")
         adapter_type = entry.pop("adapter")
         default_template = task.eval_prompt if task is not None else EVAL_PROMPT_TEMPLATE
@@ -124,7 +151,7 @@ def load_judge_arm(config_path: str) -> ModelAdapter:
     if not isinstance(raw, dict) or not isinstance(raw.get("judge"), dict):
         raise InvalidJudgeConfigError(f"'{config_path}' must have a top-level 'judge' mapping")
 
-    entry = dict(raw["judge"])
+    entry = _apply_ollama_base_url_override(dict(raw["judge"]))
     if "adapter" not in entry:
         raise InvalidJudgeConfigError("'judge' entry is missing required key 'adapter'")
 
