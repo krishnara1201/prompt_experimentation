@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.config.arms import load_arms
+from app.config.tasks import UnknownTaskError, active_task_name, load_task
 from app.db.models import EvalExample, Run, RunResult
 from app.db.session import get_session
 from app.tasks.worker import run_single_call
@@ -27,6 +28,7 @@ class RunCreateRequest(BaseModel):
     sample_size: int | None = Field(default=None, gt=0)
     repeats: int = Field(default=1, ge=1)
     seed: int | None = None
+    task: str | None = None
 
 
 class RunCreateResponse(BaseModel):
@@ -38,6 +40,7 @@ class RunCreateResponse(BaseModel):
 class RunStatusResponse(BaseModel):
     run_id: int
     status: str
+    task: str = "financial_sentiment"
     total_calls: int
     completed: int
     failed: int
@@ -48,6 +51,7 @@ class RunSummary(BaseModel):
     run_id: int
     created_at: datetime
     arm_names: list[str]
+    task: str
     status: str
     total_calls: int
     completed: int
@@ -92,6 +96,7 @@ async def list_runs(session: AsyncSession = Depends(get_session)) -> list[RunSum
                 run_id=run.id,
                 created_at=run.created_at,
                 arm_names=run.arm_names,
+                task=run.task,
                 status=status,
                 total_calls=run.total_calls,
                 completed=completed,
@@ -104,7 +109,18 @@ async def list_runs(session: AsyncSession = Depends(get_session)) -> list[RunSum
 
 @router.post("", response_model=RunCreateResponse)
 async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(get_session)):
-    available_arms = load_arms(str(ARMS_PATH))
+    task_name = payload.task or active_task_name(str(ARMS_PATH))
+    try:
+        task_cfg = load_task(task_name)
+    except UnknownTaskError as exc:
+        from app.config.tasks import list_tasks
+
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown task {task_name!r}; available: {list_tasks()}",
+        ) from exc
+
+    available_arms = load_arms(str(ARMS_PATH), task=task_cfg)
     arm_names = payload.arms if payload.arms is not None else list(available_arms.keys())
     unknown = [name for name in arm_names if name not in available_arms]
     if unknown:
@@ -114,11 +130,16 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
     # without it, so the same seed must sample from the same ordered list
     # for a run to be reproducible.
     result = await session.execute(
-        select(EvalExample.id, EvalExample.text).order_by(EvalExample.id)
+        select(EvalExample.id, EvalExample.text)
+        .where(EvalExample.source == task_cfg.source)
+        .order_by(EvalExample.id)
     )
     all_examples = result.all()
     if not all_examples:
-        raise HTTPException(status_code=400, detail="No eval examples found; run the seed script first")
+        raise HTTPException(
+            status_code=400,
+            detail=f"No eval examples for task {task_name!r}; run `pe seed --task {task_name}` first",
+        )
 
     seed = payload.seed
     if payload.sample_size is not None:
@@ -134,6 +155,7 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
         repeats=payload.repeats,
         seed=seed,
         total_calls=total_calls,
+        task=task_name,
     )
     session.add(run)
     await session.commit()
@@ -153,6 +175,7 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
                             "example_text": example_text,
                             "arm_name": arm_name,
                             "repeat_index": repeat_index,
+                            "task_name": task_name,
                         },
                         queue=queue,
                     )
@@ -188,6 +211,7 @@ async def get_run_status(run_id: int, session: AsyncSession = Depends(get_sessio
     return RunStatusResponse(
         run_id=run.id,
         status=status,
+        task=run.task,
         total_calls=run.total_calls,
         completed=completed,
         failed=failed,

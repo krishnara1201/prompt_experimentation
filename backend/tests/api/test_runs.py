@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -18,6 +19,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 FAKE_ARMS = {"fake-arm": Arm("fake-arm", object())}
+
+FAKE_TASK = SimpleNamespace(
+    name="financial_sentiment", source="test", eval_prompt="x {text}",
+    rubric="{input_text} {gold_label} {model_output}", labels=("positive",),
+    description="a test", label_names=None,
+)
 
 
 class _FakeSubscriptionAdapter:
@@ -132,7 +139,9 @@ def _insert_results(run_id: int, example_id: int, statuses: list[str]) -> None:
 
 @patch("app.api.routes.runs.run_single_call")
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
-def test_create_run_enqueues_expected_number_of_calls(mock_load_arms, mock_task):
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_create_run_enqueues_expected_number_of_calls(mock_task_cfg, mock_active, mock_load_arms, mock_task):
     example_id = _insert_example()
     run_id = None
     try:
@@ -151,14 +160,18 @@ def test_create_run_enqueues_expected_number_of_calls(mock_load_arms, mock_task)
 
 @patch("app.api.routes.runs.run_single_call")
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
-def test_create_run_rejects_unknown_arm(mock_load_arms, mock_task):
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_create_run_rejects_unknown_arm(mock_task_cfg, mock_active, mock_load_arms, mock_task):
     response = TestClient(app).post("/runs", json={"arms": ["nonexistent-arm"]})
     assert response.status_code == 400
 
 
 @patch("app.api.routes.runs.run_single_call")
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
-def test_create_run_rejects_empty_arms_list(mock_load_arms, mock_task):
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_create_run_rejects_empty_arms_list(mock_task_cfg, mock_active, mock_load_arms, mock_task):
     # An explicit [] would create a run with total_calls == 0, which can
     # never resolve past "pending". Reject it at creation time.
     response = TestClient(app).post("/runs", json={"arms": []})
@@ -167,7 +180,9 @@ def test_create_run_rejects_empty_arms_list(mock_load_arms, mock_task):
 
 @patch("app.api.routes.runs.run_single_call")
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS_MIXED)
-def test_create_run_routes_arms_to_correct_queue(mock_load_arms, mock_task):
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_create_run_routes_arms_to_correct_queue(mock_task_cfg, mock_active, mock_load_arms, mock_task):
     example_id = _insert_example()
     run_id = None
     try:
@@ -188,7 +203,9 @@ def test_create_run_routes_arms_to_correct_queue(mock_load_arms, mock_task):
 
 @patch("app.api.routes.runs.run_single_call")
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
-def test_create_run_deletes_run_row_when_enqueue_fails(mock_load_arms, mock_task):
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_create_run_deletes_run_row_when_enqueue_fails(mock_task_cfg, mock_active, mock_load_arms, mock_task):
     mock_task.apply_async.side_effect = RuntimeError("redis is down")
     example_id = _insert_example()
     run_id_before = _latest_run_id()
@@ -205,7 +222,9 @@ def test_create_run_deletes_run_row_when_enqueue_fails(mock_load_arms, mock_task
 
 @patch("app.api.routes.runs.run_single_call")
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
-def test_get_run_status_is_pending_before_any_results(mock_load_arms, mock_task):
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_get_run_status_is_pending_before_any_results(mock_task_cfg, mock_active, mock_load_arms, mock_task):
     example_id = _insert_example()
     run_id = None
     try:
@@ -223,6 +242,48 @@ def test_get_run_status_is_pending_before_any_results(mock_load_arms, mock_task)
         if run_id is not None:
             _delete_run(run_id)
         _delete_example(example_id)
+
+
+@patch("app.api.routes.runs.run_single_call")
+@patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_create_run_records_task_and_threads_task_name(mock_task_cfg, mock_active, mock_arms, mock_call):
+    example_id = _insert_example()
+    run_id = None
+    try:
+        resp = TestClient(app).post("/runs", json={"repeats": 1, "sample_size": 1, "seed": 1})
+        assert resp.status_code == 200
+        run_id = resp.json()["run_id"]
+        # task_name in every enqueue
+        for call in mock_call.apply_async.call_args_list:
+            assert call.kwargs["kwargs"]["task_name"] == "financial_sentiment"
+        # persisted on the Run
+        status = TestClient(app).get(f"/runs/{run_id}").json()
+        assert status["task"] == "financial_sentiment"
+    finally:
+        if run_id is not None:
+            _delete_run(run_id)
+        _delete_example(example_id)
+
+
+@patch("app.api.routes.runs.run_single_call")
+@patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
+def test_create_run_rejects_unknown_task(mock_arms, mock_call):
+    from app.config.tasks import UnknownTaskError
+    with patch("app.api.routes.runs.load_task", side_effect=UnknownTaskError("nope")):
+        resp = TestClient(app).post("/runs", json={"repeats": 1, "task": "bogus"})
+    assert resp.status_code == 422
+
+
+@patch("app.api.routes.runs.run_single_call")
+@patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS)
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+def test_create_run_400_when_task_has_no_seeded_examples(mock_active, mock_arms, mock_call):
+    other_task = SimpleNamespace(**{**FAKE_TASK.__dict__, "source": "nothing_seeded_here"})
+    with patch("app.api.routes.runs.load_task", return_value=other_task):
+        resp = TestClient(app).post("/runs", json={"repeats": 1, "sample_size": 1})
+    assert resp.status_code == 400
 
 
 def test_get_run_status_is_running_when_partially_done():
