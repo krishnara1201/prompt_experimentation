@@ -23,6 +23,7 @@ class Run(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=_utcnow)
+    task: str = Field(default="financial_sentiment")
     arm_names: list[str] = Field(sa_column=Column(JSON, nullable=False))
     sample_size: Optional[int] = Field(default=None)
     repeats: int
