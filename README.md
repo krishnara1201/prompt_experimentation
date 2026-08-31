@@ -1,14 +1,49 @@
 # LLM Evaluation & Prompt-Experimentation Platform
 
-A platform that treats LLM prompts and models as experiment arms and
-evaluates them with the same statistical rigor as an A/B test — paired
-significance testing, judge calibration against human labels, and a
-Bayesian equivalence test, not just a leaderboard score. Local (Ollama) and
-hosted API models are interchangeable, first-class arms in the same
-comparison, config-driven via `backend/arms.yaml`.
+Treats LLM prompts and models as **experiment arms** and compares them with
+the statistical rigor of an A/B test — paired significance tests, a Bayesian
+equivalence test, and an LLM judge calibrated against human labels — instead
+of a single leaderboard number. Local (Ollama) and hosted-API models are
+interchangeable, first-class arms in the same paired comparison, declared in
+`backend/arms.yaml` with no code changes.
 
-See `CLAUDE.md` for the full write-up: motivation, core differentiators,
-architecture, and build-phase history.
+## Result: a QLoRA fine-tune beats base Qwen3-8B — and the paired test proves it
+
+50 financial-sentiment examples × 3 repeats per arm, same eval harness, LLM
+judge for quality ([full report](docs/superpowers/reports/2026-08-30-finetune-comparison.md)):
+
+| | base `qwen3:8b` | QLoRA fine-tune | paired result |
+|---|---|---|---|
+| judge accuracy | 80.0% | **90.0%** | Wilcoxon **p = 0.031** (Holm-corrected) |
+| Bayesian posterior Δ | — | — | **+0.30**, 94% CI [+0.07, +0.53], entirely above 0 |
+| latency / call | 6,744 ms | **3,804 ms** | −2,939 ms (1.77× faster), p = 1.6e-10 |
+| output tokens / call | 296.6 | **6.0** | ~49× fewer, p < 1e-15 |
+
+![cost / latency / quality frontier](docs/superpowers/reports/2026-08-30-finetune-frontier.png)
+
+A second experiment — a prompt A/B on AG News of a terse instruction vs. a
+"reason step by step" one — found **quality is a wash** (paired Wilcoxon
+corrected p = 0.37, Bayesian P(equivalent) = 1.00 at ε = 0.5) while CoT costs
+**~40× the output tokens**; an unpaired win-rate would have misread the 1.6-pt
+noise gap as a CoT win
+([full report](docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md)).
+
+> **Honest gap:** no hosted-API arm has completed a full run yet — the
+> project's headline "is a local model good enough to replace a hosted API?"
+> comparison is still unbacked (a Gemini free-tier arm was rate-limited on
+> 130/150 calls). Everything above is base-local vs. fine-tuned-local vs.
+> prompt-vs-prompt. See the reports for the full caveats.
+
+## Dashboard
+
+React app: run list with live status polling, and a per-run tabbed view —
+paired win-rate table, cost/latency/quality frontier, judge calibration
+report. Regenerate these with `node frontend/scripts/screenshot_dashboard.mjs`
+against a running stack.
+
+| Run list | Paired win-rate table | Judge calibration |
+|---|---|---|
+| ![run list](docs/img/run-list.png) | ![win-rate table](docs/img/dashboard-winrate.png) | ![calibration](docs/img/dashboard-calibration.png) |
 
 ## Architecture
 
@@ -17,189 +52,141 @@ architecture, and build-phase history.
                -> [LLM-as-judge, calibrated] -> [stats analysis + dashboard]
 ```
 
-- **Backend** — FastAPI + Celery/Redis orchestration, Postgres results
-  store, Alembic migrations (`backend/`)
+- **Backend** — FastAPI + Celery/Redis orchestration, Postgres results store,
+  Alembic migrations (`backend/`)
 - **Model arms** — `OpenAICompatibleAdapter` (Ollama, OpenAI, OpenRouter,
   Groq, ...), `AnthropicAdapter`, plus two subscription-seat CLI adapters
   (`ClaudeCodeCLIAdapter`, `CodexCLIAdapter`) — declared in
-  `backend/arms.yaml`, no code changes to add or swap a provider
+  `backend/arms.yaml`, no code changes to add or swap a provider. **Prompts
+  are arms too**: an arm carries an optional `prompt_template`, so two arms
+  with the same model but different templates A/B the prompts under the same
+  paired stats.
+- **Tasks are packs** — a task is a directory under `backend/tasks/<name>/`
+  (label set, eval prompt, judge rubric, data file). `arms.yaml`'s `task:`
+  key selects the active one; bring-your-own eval = drop in a JSONL + a
+  `task.yaml`, no code change. Ships with `financial_sentiment` and `ag_news`.
 - **Judge layer** — rubric-based LLM-as-judge, calibrated against a
-  hand-labeled gold subset before scores are trusted
-- **Stats layer** — paired bootstrap + Wilcoxon signed-rank +
-  Holm-Bonferroni correction, PyMC Bayesian equivalence test, sample-size
-  calculator (`backend/app/stats/`)
-- **Dashboard** — React (`frontend/`): win-rate table, cost/latency/quality
-  frontier, judge calibration report
+  hand-labeled gold subset (Spearman + Cohen's κ) before scores are trusted
+- **Stats layer** — hierarchical paired bootstrap + Wilcoxon signed-rank +
+  Holm-Bonferroni correction, PyMC Bayesian equivalence test, closed-form
+  sample-size / power calculator (`backend/app/stats/`)
+- **`pe` CLI** — one entrypoint over the whole loop (stack lifecycle, seeding,
+  runs, stats, calibration)
+- **MCP judge tool** — `score_output_against_gold` (server `rubric-judge`),
+  for scoring a single candidate response from a Claude Code session
 
-## Run with Docker
+Full write-up — motivation, the five core differentiators, build-phase
+history — is in [`CLAUDE.md`](CLAUDE.md). Executed experiments are under
+[`docs/superpowers/reports/`](docs/superpowers/reports/).
 
-Requires [Docker](https://www.docker.com/) and Docker Compose.
+## Quickstart
+
+Requires [Docker](https://www.docker.com/) + Compose, and a native Ollama on
+the host (`ollama serve`, `ollama pull qwen3:8b`).
 
 ```bash
-cp .env.example .env   # set POSTGRES_PASSWORD; fill in API keys you have
+cp .env.example .env    # set POSTGRES_PASSWORD; fill in any API keys you have
 docker compose up --build
+# dashboard → http://localhost:5173   API → http://localhost:8000
 ```
 
-This brings up Postgres, Redis, a migration job, the FastAPI backend, the
-Celery worker, and the dashboard frontend (nginx, serving the production
-build and proxying `/api` to the backend). Once healthy:
-
-- Dashboard: http://localhost:5173
-- API: http://localhost:8000
-
-### Driving it with the `pe` CLI
-
-`pe` is a single entrypoint for the whole loop — stack lifecycle, seeding,
-runs, stats, and judge calibration. Run it with `uv run pe …` from
-`backend/` (uv syncs on first use):
+Then drive the whole loop with the `pe` CLI (from `backend/`, `uv` syncs on
+first use):
 
 ```bash
 cd backend
-uv run pe up            # docker compose up -d --build, wait for the API
-uv run pe seed          # seed the eval dataset (idempotent)
+uv run pe up                                      # compose up -d, wait for API
+uv run pe seed                                    # seed the eval dataset (idempotent)
 uv run pe run --sample 20 --repeats 3 --seed 42   # start a run, prints run_id
-uv run pe watch 1       # poll until it finishes
+uv run pe watch 1                                 # poll until it finishes
 uv run pe stats compare 1                         # paired comparison
-uv run pe arms          # list configured arms
+uv run pe --help                                  # every command
+
+./scripts/demo.sh          # or: the whole happy path end to end
+DEMO_TASK=ag_news ./scripts/demo.sh   # ...against the non-financial pack
 ```
 
-`uv run pe --help` lists every command. Point it at a non-default API with
-`PE_API_URL`. Runs can also be started from the dashboard's **New run**
-button; the raw API is still there (`curl -X POST localhost:8000/runs -d
-'{"sample_size": 20, "repeats": 3, "seed": 42}'`).
+Runs can also be started from the dashboard's **New run** button, or the raw
+API (`curl -X POST localhost:8000/runs -d '{"sample_size": 20, "repeats": 3}'`).
 
-### One-command demo
+### Connecting the local Ollama from Docker
 
-```bash
-./scripts/demo.sh      # up + seed + run + watch + compare, end to end
-```
-
-**Local model (Ollama) arm** — Ollama itself is not containerized; it's
-expected to already be running natively on the host (`ollama serve`,
-`ollama pull qwen3:8b`), the same as a non-Docker setup, and it must be
-listening on `0.0.0.0`, not just `127.0.0.1` — an OS-managed Ollama
-(systemd, launchd) usually defaults to loopback-only, which containers
-can't reach regardless of the fix below. Set `OLLAMA_HOST=0.0.0.0:11434`
-in its environment and restart it (on a systemd host: a
-`/etc/systemd/system/ollama.service.d/override.conf` drop-in with
-`Environment="OLLAMA_HOST=0.0.0.0:11434"`, then
-`systemctl daemon-reload && systemctl restart ollama`).
-
-`backend/arms.yaml`'s `qwen3-8b-local` entry ships pointed at
-`http://localhost:11434/v1` for the non-Docker default flow (see
-`backend/README.md`); that doesn't resolve to the host from inside a
-container. **Don't edit `arms.yaml` for this** — set `OLLAMA_BASE_URL` in
-`.env` instead. It redirects every arm/judge pointed at a local Ollama
-(`localhost` or `127.0.0.1` on `:11434`) to the given URL, leaving
-`arms.yaml` on `localhost` for everyone else and matching hosted providers
-on the same adapter (OpenAI, Gemini) by host so they're untouched:
+Ollama runs natively on the host, not in a container. `arms.yaml` points
+`qwen3-8b-local` at `http://localhost:11434/v1` for the non-Docker flow; from
+inside a container that doesn't resolve to the host. **Don't edit
+`arms.yaml`** — set `OLLAMA_BASE_URL` in `.env`, which redirects every
+arm/judge pointed at a local Ollama (`localhost`/`127.0.0.1` on `:11434`)
+while leaving hosted providers on the same adapter untouched:
 
 ```bash
-# .env
+# .env — try host.docker.internal first; on Docker Desktop + WSL2 that
+# gateway may refuse the connection, in which case use the WSL eth0 IP
+# (`ip addr show eth0 | grep inet`), which is not stable across `wsl --shutdown`.
 OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
 ```
 
-Try `host.docker.internal` first — it works on most Docker Desktop setups.
-If calls still fail with `Connection refused` (seen on at least one Docker
-Desktop + WSL2 setup, where `host.docker.internal` reaches a gateway that
-refuses the connection even though Windows' own `localhost:11434`
-forwarding works), use the IP of the WSL distro's `eth0` interface instead
-(`ip addr show eth0 | grep inet`) — that address isn't guaranteed stable
-across a `wsl --shutdown`/reboot, so re-check it if connectivity breaks
-later. `OLLAMA_BASE_URL` is read from the environment on every config load,
-so changing it only needs a `docker compose up -d` (no `arms.yaml` edit, no
-rebuild).
+Ollama must also listen on `0.0.0.0`, not loopback-only — set
+`OLLAMA_HOST=0.0.0.0:11434` in its environment and restart it. On Docker
+Desktop + WSL2, if a container's `/app/arms.yaml` doesn't reflect an edit,
+recreate rather than restart: `docker compose up -d --force-recreate api worker`.
 
-`arms.yaml` is bind-mounted read-only into `api`/`worker`, so *other* edits
-(adding an arm, changing a prompt) don't need an image rebuild — but on
-Docker Desktop + WSL2, editing it *while the containers are running* can
-leave them pinned to the old file (many editors write-then-rename, and the
-bind mount follows the now-unlinked inode). If a container's
-`/app/arms.yaml` doesn't reflect your change, recreate it rather than
-`docker compose restart`:
+**Subscription-seat CLI arms (Claude Code, Codex)** are also not
+containerized — run their dedicated `subscription_cli` worker natively on the
+host. See "Subscription-seat CLI arms" in `backend/README.md`.
 
-```bash
-docker compose up -d --force-recreate api worker
-```
-
-**Subscription-seat CLI arms (Claude Code, Codex)** — also not
-containerized. They drive an already-authenticated `claude`/`codex` CLI
-session on the host, and mounting that host credential/session state into a
-container isn't worth the security surface for what's already an opt-in
-arm type. Run their dedicated `subscription_cli` worker natively on the
-host instead; it can reach the Dockerized Postgres/Redis via the ports
-published to `127.0.0.1`. See "Subscription-seat CLI arms" in
-`backend/README.md`.
-
-## Run without Docker
+### Without Docker
 
 See `backend/README.md` and `frontend/README.md` for native setup
 (`uv sync` / `npm install`, Ollama, migrations, `npm run dev`).
 
-## Agent-facing judge tool
+## Tests
 
-The repo-root `.mcp.json` registers an MCP tool,
-`score_output_against_gold` (server `rubric-judge`), for any Claude Code
-session opened in this repo (standard project-scoped-server approval prompt
-applies) — it lets a coding agent score one candidate response against a
-gold label directly, using the active task's rubric, without running a full
-eval. See "Phase 6" in `backend/README.md` for the tool signature and how to
-use it from another MCP client.
+```bash
+cd backend && uv run pytest -v        # 335 tests
+cd frontend && npm run lint && npm run build && npm test
+```
+
+The Ollama end-to-end test and the database tests skip automatically when
+those services aren't reachable.
 
 ## Data & license
 
-The eval benchmark is the **Financial PhraseBank** 100%-agreement subset
-(2264 sentence-level, 3-class financial-sentiment examples with expert
+The primary eval benchmark is the **Financial PhraseBank** 100%-agreement
+subset (2264 sentence-level, 3-class financial-sentiment examples with expert
 agreement):
 
 > Malo, P., Sinha, A., Korhonen, P., Wallenius, J., & Takala, P. (2014).
-> *Good debt or bad debt: Detecting semantic orientations in economic
-> texts.* Journal of the Association for Information Science and
-> Technology, 65(4), 782–796.
+> *Good debt or bad debt: Detecting semantic orientations in economic texts.*
+> Journal of the Association for Information Science and Technology, 65(4),
+> 782–796.
 
-It is vendored at
-`backend/data/financial_phrasebank/sentences_allagree.txt` (regenerate
-with `backend/scripts/fetch_financial_phrasebank.py`, which pulls the
-`gtfintechlab/financial_phrasebank_sentences_allagree` Hugging Face
-mirror). The judge calibration workflow stores only row IDs plus human
-labels, never redistributed source text.
+It is vendored at `backend/data/financial_phrasebank/sentences_allagree.txt`
+(regenerate with `backend/scripts/fetch_financial_phrasebank.py`). The judge
+calibration workflow stores only row IDs plus human labels, never
+redistributed source text.
 
 **The dataset is licensed [CC BY-NC-SA 3.0](http://creativecommons.org/licenses/by-nc-sa/3.0/)**
-— attribution, **non-commercial use only**, and share-alike. Those terms
-bind this repo's bundled copy and anything derived from it. The eval
-dataset is a swap-in point, not hardwired into the stats or judge layers:
-a commercial user should substitute a permissively-licensed sentiment set.
-Repo code is separate from the dataset license.
+— attribution, **non-commercial use only**, and share-alike. Those terms bind
+this repo's bundled copy and anything derived from it. The eval dataset is a
+swap-in point (a task pack), not hardwired into the stats or judge layers: a
+commercial user substitutes a permissively-licensed set. Repo code is
+separate from the dataset license.
 
 ### AG News (secondary task pack, prompt-A/B demo)
 
-The `ag_news` task pack (`backend/tasks/ag_news/`) uses **AG News**, a
-4-class news-topic benchmark (World, Sports, Business, Sci/Tech) derived
-from "AG's corpus of news articles on the web" (the ComeToMyHead news
-aggregator) and popularized by:
+The `ag_news` task pack uses **AG News**, a 4-class news-topic benchmark
+(World, Sports, Business, Sci/Tech) popularized by:
 
 > Zhang, X., Zhao, J., & LeCun, Y. (2015). *Character-level Convolutional
-> Networks for Text Classification.* Advances in Neural Information
-> Processing Systems 28 (NeurIPS 2015).
+> Networks for Text Classification.* NeurIPS 28.
 
 The underlying AG corpus is provided for **non-commercial research** only.
 Only a 120-row stratified sample (30 per class) is vendored, at
-`backend/tasks/ag_news/data.jsonl`; regenerate it with
-`backend/tasks/ag_news/fetch_ag_news.py`, which pulls the
-`fancyzhx/ag_news` Hugging Face mirror. See
+`backend/tasks/ag_news/data.jsonl`; regenerate with
+`backend/tasks/ag_news/fetch_ag_news.py`. See
 `backend/tasks/ag_news/LICENSE.txt`.
 
 ## Tech stack
 
 Python, FastAPI, SQLModel, Celery, Redis, PostgreSQL, Alembic, Ollama,
 scipy/statsmodels, PyMC, TypeScript, React, Vite, Docker.
-
-## Tests
-
-```bash
-cd backend && uv run pytest -v
-```
-
-The Ollama end-to-end test skips automatically if Ollama isn't running
-locally, and the database tests skip automatically if Postgres isn't
-reachable.
