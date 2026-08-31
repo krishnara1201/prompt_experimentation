@@ -88,13 +88,52 @@ Full write-up — motivation, the five core differentiators, build-phase
 history — is in [`CLAUDE.md`](CLAUDE.md). Executed experiments are under
 [`docs/superpowers/reports/`](docs/superpowers/reports/).
 
-## Quickstart
+## Getting started
 
-Requires [Docker](https://www.docker.com/) + Compose, and a native Ollama on
-the host (`ollama serve`, `ollama pull qwen3:8b`).
+Two ways in, depending on what you want.
+
+### Path A — score one response against a gold label (MCP, no Docker)
+
+The lightweight path: a coding agent (or any MCP client) gets a single
+calibrated 1–5 judge score for one candidate output. No database, no
+orchestrator — just the judge.
+
+**Needs:** [`uv`](https://docs.astral.sh/uv/) and a judge model reachable.
+The default judge is a local Ollama (`ollama serve`, `ollama pull qwen3:8b`),
+which is keyless and offline; point `judge:` in `backend/arms.yaml` at a
+hosted model instead if you prefer (key goes in `backend/.env`).
+
+The repo-root [`.mcp.json`](.mcp.json) registers the server. In a Claude Code
+session opened in this repo, approve the project-scoped `rubric-judge` server
+when prompted, then call:
+
+```
+score_output_against_gold(
+  input_text  = "Net sales fell by 5% from the previous period.",
+  gold_label  = "negative",          # must be one of the active task's labels
+  model_output = "The sentiment is negative because sales declined.",
+)
+→ { score: 5, rationale: "...", judge_model: "qwen3:8b", task: "financial_sentiment" }
+```
+
+The active task (its label set + rubric) comes from `arms.yaml`'s `task:`
+key. From another MCP client, run the server directly:
+`uv run --directory backend python -m app.mcp_judge_server`. Signature and
+error cases: "Phase 6" in `backend/README.md`.
+
+That is the whole of Path A. It does **not** give you paired comparisons,
+repeated runs, calibration, or the dashboard — for those, use Path B.
+
+### Path B — run the full A/B eval platform
+
+**Needs:** [Docker](https://www.docker.com/) + Compose, `uv`, and a native
+Ollama on the host (`ollama serve`, `ollama pull qwen3:8b`) listening on
+`0.0.0.0` (see below). A GPU in practice — `qwen3:8b` on CPU is very slow.
+Optionally, API keys for hosted arms.
 
 ```bash
-cp .env.example .env    # set POSTGRES_PASSWORD; fill in any API keys you have
+cp .env.example .env    # set POSTGRES_PASSWORD and OLLAMA_BASE_URL (see below);
+                        # fill in any API keys you have
 docker compose up --build
 # dashboard → http://localhost:5173   API → http://localhost:8000
 ```
@@ -107,16 +146,25 @@ cd backend
 uv run pe up                                      # compose up -d, wait for API
 uv run pe seed                                    # seed the eval dataset (idempotent)
 uv run pe run --sample 20 --repeats 3 --seed 42   # start a run, prints run_id
-uv run pe watch 1                                 # poll until it finishes
-uv run pe stats compare 1                         # paired comparison
+uv run pe watch 1                                 # poll until it finishes (arm calls + judge)
+uv run pe stats compare 1                         # paired Wilcoxon + bootstrap CI + Holm
+uv run pe stats equivalence 1 --local A --api B    # Bayesian P(local ≥ api − ε)
+uv run pe calibrate select --run-id 1 --n 50 --out cal.json   # then hand-label,
+uv run pe calibrate import --in cal.json --labeled-by you     # import, and
+uv run pe calibrate report --run-id 1                         # check judge agreement
 uv run pe --help                                  # every command
 
-./scripts/demo.sh          # or: the whole happy path end to end
-DEMO_TASK=ag_news ./scripts/demo.sh   # ...against the non-financial pack
+./scripts/demo.sh                      # or: the whole happy path end to end
+DEMO_TASK=ag_news ./scripts/demo.sh    # ...against the non-financial pack
 ```
 
 Runs can also be started from the dashboard's **New run** button, or the raw
 API (`curl -X POST localhost:8000/runs -d '{"sample_size": 20, "repeats": 3}'`).
+
+**Bring your own model or prompt** — add an entry to `backend/arms.yaml` (a
+provider + model, or the same model with a different `prompt_template`), no
+code change. **Bring your own eval** — drop a `task.yaml` + a `.jsonl` under
+`backend/tasks/<name>/` and point `arms.yaml`'s `task:` at it.
 
 ### Connecting the local Ollama from Docker
 
