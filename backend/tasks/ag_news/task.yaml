@@ -1,0 +1,28 @@
+name: ag_news
+description: a news-topic classification
+labels: [World, Sports, Business, Sci/Tech]
+source: ag_news_sample
+data: data.jsonl
+format: jsonl
+label_names: [World, Sports, Business, Sci/Tech]
+eval_prompt: |-
+  Classify the topic of the news snippet below as exactly one of: World, Sports, Business, Sci/Tech. Answer with only the label.
+
+  Snippet: {text}
+rubric: |
+  You are grading a news-topic classification model's response.
+
+  Input text: {input_text}
+  Correct label: {gold_label}
+  Model's response: {model_output}
+
+  Score the response 1-5:
+  5 = correctly identifies the label as {gold_label}, clearly and directly
+  4 = correct label, with minor clarity/formatting issues
+  3 = ambiguous, hedged, or only partially matches the correct label
+  2 = identifies the wrong label but the response is otherwise coherent/on-topic
+  1 = wrong label, off-topic, malformed, or non-responsive
+
+  Respond in exactly this format:
+  SCORE: <1-5>
+  RATIONALE: <one sentence>

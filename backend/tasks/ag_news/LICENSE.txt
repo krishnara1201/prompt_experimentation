@@ -1,0 +1,20 @@
+AG News — attribution and usage
+================================
+
+The AG News topic-classification dataset is derived from "AG's corpus of news
+articles on the web" collected by the ComeToMyHead academic news aggregator
+(http://www.di.unipi.it/~gulli/AG_corpus_of_news_articles.html).
+
+It was constructed and popularized as a benchmark by:
+
+    Xiang Zhang, Junbo Zhao, Yann LeCun (2015).
+    "Character-level Convolutional Networks for Text Classification."
+    Advances in Neural Information Processing Systems 28 (NeurIPS 2015).
+
+The underlying AG corpus is provided for non-commercial research and
+informational purposes only, per the ComeToMyHead terms.
+
+Only a small stratified sample is vendored in this repository: 120 rows
+(30 per class: World, Sports, Business, Sci/Tech) drawn from the Hugging Face
+`fancyzhx/ag_news` test split by `fetch_ag_news.py`. The full corpus is not
+redistributed here. Re-run `fetch_ag_news.py` to regenerate the sample.

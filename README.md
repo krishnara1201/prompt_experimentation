@@ -163,6 +163,24 @@ dataset is a swap-in point, not hardwired into the stats or judge layers:
 a commercial user should substitute a permissively-licensed sentiment set.
 Repo code is separate from the dataset license.
 
+### AG News (secondary task pack, prompt-A/B demo)
+
+The `ag_news` task pack (`backend/tasks/ag_news/`) uses **AG News**, a
+4-class news-topic benchmark (World, Sports, Business, Sci/Tech) derived
+from "AG's corpus of news articles on the web" (the ComeToMyHead news
+aggregator) and popularized by:
+
+> Zhang, X., Zhao, J., & LeCun, Y. (2015). *Character-level Convolutional
+> Networks for Text Classification.* Advances in Neural Information
+> Processing Systems 28 (NeurIPS 2015).
+
+The underlying AG corpus is provided for **non-commercial research** only.
+Only a 120-row stratified sample (30 per class) is vendored, at
+`backend/tasks/ag_news/data.jsonl`; regenerate it with
+`backend/tasks/ag_news/fetch_ag_news.py`, which pulls the
+`fancyzhx/ag_news` Hugging Face mirror. See
+`backend/tasks/ag_news/LICENSE.txt`.
+
 ## Tech stack
 
 Python, FastAPI, SQLModel, Celery, Redis, PostgreSQL, Alembic, Ollama,
