@@ -5,11 +5,20 @@ export interface ArmInfo {
   prompt_template: string;
 }
 
+export interface TaskInfo {
+  name: string;
+  description: string;
+  labels: string[];
+  active: boolean;
+  seeded_count: number;
+}
+
 export interface RunCreateRequest {
   arms?: string[];
   sample_size?: number;
   repeats?: number;
   seed?: number;
+  task?: string;
 }
 
 export interface RunCreateResponse {
@@ -22,7 +31,18 @@ export interface RunSummary {
   run_id: number;
   created_at: string;
   arm_names: string[];
+  task: string;
   status: string;
+  total_calls: number;
+  completed: number;
+  failed: number;
+  pending: number;
+}
+
+export interface RunStatusResponse {
+  run_id: number;
+  status: string;
+  task: string;
   total_calls: number;
   completed: number;
   failed: number;

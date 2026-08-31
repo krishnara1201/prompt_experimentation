@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
+import { fetchRunStatus } from '../api/client';
 import { WinRateTable } from '../components/WinRateTable';
 import { FrontierChart } from '../components/FrontierChart';
 import { CalibrationReport } from '../components/CalibrationReport';
@@ -21,9 +23,20 @@ export function RunDashboardPage() {
   const [tab, setTab] = useState<TabKey>('winrate');
   const runIdNum = Number(runId);
 
+  const statusQuery = useQuery({
+    queryKey: ['run-status', runIdNum],
+    queryFn: () => fetchRunStatus(runIdNum),
+    enabled: Number.isFinite(runIdNum),
+  });
+
   return (
     <div className="p-6">
-      <h1 className="mb-4 text-xl font-semibold">Run #{runIdNum}</h1>
+      <div className="mb-4">
+        <h1 className="text-xl font-semibold">Run #{runIdNum}</h1>
+        {statusQuery.data && (
+          <p className="mt-1 text-sm text-gray-500">Task: {statusQuery.data.task}</p>
+        )}
+      </div>
       <div className="mb-4 flex gap-2 border-b">
         {TABS.map(({ key, label }) => (
           <button

@@ -7,7 +7,9 @@ import type {
   PowerResponse,
   RunCreateRequest,
   RunCreateResponse,
+  RunStatusResponse,
   RunSummary,
+  TaskInfo,
 } from './types';
 
 const BASE = '/api';
@@ -40,6 +42,14 @@ export function fetchRuns(): Promise<RunSummary[]> {
 
 export function fetchArms(): Promise<ArmInfo[]> {
   return getJson<ArmInfo[]>('/arms');
+}
+
+export function fetchTasks(): Promise<TaskInfo[]> {
+  return getJson<TaskInfo[]>('/tasks');
+}
+
+export function fetchRunStatus(runId: number): Promise<RunStatusResponse> {
+  return getJson<RunStatusResponse>(`/runs/${runId}`);
 }
 
 export function createRun(body: RunCreateRequest): Promise<RunCreateResponse> {

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { createRun, fetchArms } from '../api/client';
+import { createRun, fetchArms, fetchTasks } from '../api/client';
 import type { RunCreateRequest } from '../api/types';
 
 function parseOptionalInt(value: string): number | undefined {
@@ -17,11 +17,22 @@ export function NewRunForm() {
   const [repeats, setRepeats] = useState('1');
   const [seed, setSeed] = useState('');
   const [selectedArms, setSelectedArms] = useState<string[]>([]);
+  const [task, setTask] = useState<string>('');
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const armsQuery = useQuery({ queryKey: ['arms'], queryFn: fetchArms, enabled: open });
+  const tasksQuery = useQuery({ queryKey: ['tasks'], queryFn: fetchTasks, enabled: open });
+
+  useEffect(() => {
+    if (task !== '' || !tasksQuery.data) return;
+    const active = tasksQuery.data.find((t) => t.active) ?? tasksQuery.data[0];
+    if (active) setTask(active.name);
+  }, [task, tasksQuery.data]);
+
+  const selectedTask = tasksQuery.data?.find((t) => t.name === task);
+  const taskNotSeeded = selectedTask !== undefined && selectedTask.seeded_count === 0;
 
   const mutation = useMutation({
     mutationFn: (body: RunCreateRequest) => createRun(body),
@@ -45,6 +56,7 @@ export function NewRunForm() {
     const seedValue = parseOptionalInt(seed);
     if (seedValue !== undefined) body.seed = seedValue;
     if (selectedArms.length > 0) body.arms = selectedArms;
+    if (task) body.task = task;
     mutation.mutate(body);
   }
 
@@ -67,6 +79,34 @@ export function NewRunForm() {
           Cancel
         </button>
       </div>
+
+      <label className="mb-2 block">
+        <span className="text-xs uppercase text-gray-500">Task</span>
+        {tasksQuery.isLoading && <p className="mt-1 text-xs text-gray-500">Loading tasks…</p>}
+        {tasksQuery.error && (
+          <p className="mt-1 text-xs text-red-600">
+            {tasksQuery.error instanceof Error ? tasksQuery.error.message : 'Failed to load tasks.'}
+          </p>
+        )}
+        {tasksQuery.data && (
+          <select
+            value={task}
+            onChange={(e) => setTask(e.target.value)}
+            className="mt-1 w-full rounded border px-2 py-1"
+          >
+            {tasksQuery.data.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name} ({t.seeded_count} seeded)
+              </option>
+            ))}
+          </select>
+        )}
+        {taskNotSeeded && (
+          <p className="mt-1 text-xs text-red-600">
+            Run <code>pe seed --task {task}</code> first.
+          </p>
+        )}
+      </label>
 
       <label className="mb-2 block">
         <span className="text-xs uppercase text-gray-500">Sample size</span>
@@ -134,7 +174,7 @@ export function NewRunForm() {
 
       <button
         type="submit"
-        disabled={mutation.isPending}
+        disabled={mutation.isPending || taskNotSeeded}
         className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
       >
         {mutation.isPending ? 'Starting…' : 'Start run'}

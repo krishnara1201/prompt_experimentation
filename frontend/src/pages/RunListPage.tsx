@@ -34,6 +34,7 @@ export function RunListPage() {
               <tr className="border-b text-xs uppercase text-gray-500">
                 <th className="py-2">Run</th>
                 <th>Created</th>
+                <th>Task</th>
                 <th>Arms</th>
                 <th>Status</th>
                 <th>Progress</th>
@@ -50,6 +51,7 @@ export function RunListPage() {
                   {/* Backend stores naive UTC (no offset in the string), so append 'Z'
                       to make Date parse it as UTC instead of local time. */}
                   <td>{new Date(run.created_at + 'Z').toLocaleString()}</td>
+                  <td>{run.task}</td>
                   <td>{run.arm_names.join(', ')}</td>
                   <td>
                     <StatusBadge status={run.status} />
