@@ -16,8 +16,14 @@ from app.db.session import engine
 from app.tasks.worker import run_judge_call
 
 
-async def _reset_and_fetch(run_id: int) -> list[int]:
+async def _reset_and_fetch(run_id: int) -> tuple[list[int], str]:
     async with engine.begin() as conn:
+        task = (
+            await conn.execute(
+                text("SELECT task FROM run WHERE id = :rid"),
+                {"rid": run_id},
+            )
+        ).scalar_one()
         ids = (
             await conn.execute(
                 text(
@@ -35,14 +41,16 @@ async def _reset_and_fetch(run_id: int) -> list[int]:
             ),
             {"rid": run_id},
         )
-    return list(ids)
+    return list(ids), task
 
 
 def main(run_id: int) -> None:
-    ids = asyncio.run(_reset_and_fetch(run_id))
+    ids, task = asyncio.run(_reset_and_fetch(run_id))
     for result_id in ids:
-        run_judge_call.apply_async(kwargs={"run_result_id": result_id}, queue="celery")
-    print(f"re-enqueued {len(ids)} judge calls for run {run_id}")
+        run_judge_call.apply_async(
+            kwargs={"run_result_id": result_id, "task_name": task}, queue="celery"
+        )
+    print(f"re-enqueued {len(ids)} judge calls for run {run_id} (task={task})")
 
 
 if __name__ == "__main__":
