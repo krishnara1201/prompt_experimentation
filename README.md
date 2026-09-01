@@ -34,14 +34,23 @@ label-correctness (Cohen's κ = 1.00), and the one disagreement pattern is the
 judge collapsing the 1–5 rubric to a binary
 ([full report](docs/superpowers/reports/2026-08-31-judge-calibration-financial.md)).
 
-**[`docs/RESULTS.md`](docs/RESULTS.md) is the readable walk-through of all
-three** — the question, what each found, and the honest gap below.
+A fourth experiment answers the headline question with a **hosted arm**:
+local `qwen3:8b` vs. `claude-code-sonnet` (the `claude` CLI under a Max seat,
+no per-token bill), 150 Financial PhraseBank sentences. **Quality is not
+significantly different** (paired Wilcoxon corrected p = 0.10; 87.3% vs 92.0%
+raw accuracy; Bayesian P(within ±0.5) = 1.00, though underpowered at n = 150).
+Median latency is comparable (3.8 s vs 2.4 s); the local arm's weakness is a
+long latency tail under memory pressure, not headline quality
+([full report](docs/superpowers/reports/2026-09-01-local-vs-cli-hosted.md)).
 
-> **Honest gap:** no hosted-API arm has completed a full run yet — the
-> project's headline "is a local model good enough to replace a hosted API?"
-> comparison is still unbacked (a Gemini free-tier arm was rate-limited on
-> 130/150 calls). Everything above is base-local vs. fine-tuned-local vs.
-> prompt-vs-prompt. See the reports for the full caveats.
+**[`docs/RESULTS.md`](docs/RESULTS.md) is the readable walk-through of all
+four** — the question, what each found, and the remaining gap below.
+
+> **Remaining gap:** the hosted arm above is a flat-rate *subscription* seat,
+> not a *metered* per-token API — so the cost/quality frontier still has no
+> real dollar figure on its x-axis. A metered arm (GPT-4o-mini / Gemini /
+> Claude API) needs a paid key; the free Gemini tier 429'd 130/150 calls. The
+> pipeline is ready for it.
 
 ## Dashboard
 

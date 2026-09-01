@@ -176,3 +176,6 @@ judge:
   base_url: http://localhost:11434/v1
   model: qwen3:8b
   max_tokens: 1024
+  # qwen3:8b judges with thinking on; a slow think occasionally passes the
+  # 60s adapter default and is wrongly recorded as a failed judge call.
+  timeout: 300

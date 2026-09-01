@@ -21,8 +21,9 @@ Can a **local** model — an 8B model on a 12GB consumer GPU — stand in for a
 hosted API model on a real classification task, once you account for quality,
 latency, and cost honestly?
 
-Three experiments chip at that question. A fourth leg — the actual
-local-vs-hosted-API run — has **not landed** (see "The open gap" below).
+Four experiments chip at that question. The fourth — the actual
+local-vs-hosted run — landed via a subscription-seat Claude arm (Experiment
+4); a *metered* per-token API arm is still outstanding.
 
 ---
 
@@ -125,26 +126,48 @@ Full report:
 
 ---
 
-## The open gap — no hosted-API arm has ever completed a run
+## Experiment 4 — is the local model good enough to replace a hosted one?
 
-This is the honest hole in the project. The headline question — *is the local
-model good enough to replace a hosted API arm?* — needs a hosted-API arm in a
-paired run, and that has not happened:
+The headline question, finally answered with a hosted arm in a real paired
+run. Run **1058**: `qwen3-8b-local` (Ollama, Qwen3-8B) vs. `claude-code-sonnet`
+(the authenticated `claude` CLI under a Max seat — **no per-token bill**), same
+150 Financial PhraseBank sentences, 300 calls, 0 failures.
 
-- A `gemini-flash` arm was added, but Google's free tier rate-limited **130
-  of 150 calls** (HTTP 429). Only 20 calls across 8 examples landed — not
-  enough for any paired test to converge.
-- Running it for real needs a **paid API key** (~$5 of OpenAI / Anthropic /
-  Gemini credit) or a deliberately throttled re-run at concurrency 1.
+| | accuracy | median latency | cost |
+|---|---|---|---|
+| `qwen3-8b-local` | 87.3% (131/150) | 3.8 s | none (local compute) |
+| `claude-code-sonnet` | 92.0% (138/150) | 2.4 s | none (flat-rate seat) |
 
-The entire pipeline that would consume that data is built and exercised — the
-equivalence endpoint, the frontier plot, the paired tests — against the
-base-vs-fine-tune and prompt-vs-prompt comparisons. The API leg is a config
-edit and a run away; it just costs money this project hasn't spent.
+- **Quality: no significant difference.** Paired Wilcoxon corrected
+  **p = 0.10**; mean Δ `judge_score` −0.15, 95% CI [−0.32, +0.02]. Bayesian
+  **P(local within ±0.5 of hosted) = 1.00**. The ~5-point raw-accuracy gap in
+  Claude's favour is real on the point estimate but this sample can't confirm
+  it (achieved power 0.39; ~414 examples needed).
+- **Latency: comparable typically, worse in the tail.** Median 3.8 s vs
+  2.4 s. But a few local calls stalled for minutes-to-hours (mean 88 s is
+  outlier-driven) when Ollama hit memory pressure on the 7.8 GB box; the
+  hosted arm stayed 1.8–4.5 s with no tail. Hardware-specific, but a real
+  reliability difference on constrained local kit.
+- **Cost: both `null`.** Local compute vs. a flat subscription seat — the
+  frontier's "third category", neither one a per-token price.
+- **Caveat:** the judge (`qwen3:8b`) shares a base model with the local arm,
+  so self-preference would *understate* Claude's lead if anything.
 
-Stated plainly: **this project rigorously compares two local models and two
-prompts, and calibrates its judge. It does not yet have the
-local-vs-hosted-API number it was built to produce.**
+Enabled by `serial_eval_run.py` — an in-process runner that **pauses on the
+Claude seat's usage limit and resumes after it resets** (the CLI arm ran in
+5 batches of 30 to leave the shared seat headroom).
+
+**Bottom line:** for batch financial sentiment where an occasional slow call
+is fine, local Qwen3-8B is a defensible replacement for hosted Sonnet; where
+p99 latency matters, it isn't. Full report:
+[`docs/superpowers/reports/2026-09-01-local-vs-cli-hosted.md`](superpowers/reports/2026-09-01-local-vs-cli-hosted.md).
+
+### Still not done — a *metered* API arm
+
+Run 1058 uses a subscription seat, not a per-token API. A metered arm
+(GPT-4o-mini / Gemini / Claude API) would put a real dollar figure on the
+frontier's x-axis; that still needs a paid key (the free `gemini-flash` tier
+429'd 130/150 calls). The pipeline is ready for it — a config edit and a run.
 
 ---
 

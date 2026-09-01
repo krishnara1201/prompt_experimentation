@@ -181,8 +181,9 @@ a local model and hosted API models.
    as a smoke test. Spec:
    `docs/superpowers/specs/2026-08-29-agent-facing-judge-tool-design.md`
    (see the 2026-08-29 post-implementation amendment).
-7. **Local fine-tune** ✅ **Done (base-vs-fine-tune executed; API arm still
-   pending API keys).** `backend/app/training/` — QLoRA fine-tune of Qwen3-8B on the
+7. **Local fine-tune** ✅ **Done (base-vs-fine-tune + local-vs-hosted
+   executed; a metered per-token API arm still pending a paid key).**
+   `backend/app/training/` — QLoRA fine-tune of Qwen3-8B on the
    Financial PhraseBank *lower-agreement* subset (disjoint from the
    all-agree eval set, enforced by a leakage guard in
    `training/dataset.py`), then merge → GGUF → `ollama create` so the
@@ -198,9 +199,22 @@ a local model and hosted API models.
    judge sample the fine-tune is
    a *significant* quality win over the base (90% vs 80% accuracy, paired
    Wilcoxon corrected p=0.031, Bayesian posterior +0.30 clearing zero) and
-   ~1.8× faster / ~49× fewer output tokens. The metered-API leg still did not
-   land — a `gemini-flash` arm was added but Google's free tier rate-limited
-   130/150 calls (HTTP 429); a paid key or a throttled re-run is still needed.
+   ~1.8× faster / ~49× fewer output tokens.
+
+   **Local-vs-hosted leg — DONE via a subscription-seat arm** (run 1058,
+   `docs/superpowers/reports/2026-09-01-local-vs-cli-hosted.md`):
+   `qwen3-8b-local` vs. `claude-code-sonnet` (the `claude` CLI under a Max
+   seat, no per-token bill), 150 Financial PhraseBank sentences, 300 calls,
+   0 failures. Quality is **not significantly different** (paired Wilcoxon
+   corrected p=0.10; 87.3% vs 92.0% raw accuracy; Bayesian P(within ±0.5)
+   =1.00, but underpowered — achieved power 0.39, ~414 examples needed for a
+   tight claim). Median latency comparable (3.8s vs 2.4s) but the local arm
+   had a severe tail (max 3.4h) under memory pressure on the 7.8GB box. Both
+   costs `null`. Run via `backend/scripts/serial_eval_run.py`, an in-process
+   runner that pauses on the Claude seat's usage limit and resumes after it
+   resets (`--max-cli-calls` batches the CLI phase). A *metered* per-token
+   API arm (real $/token on the frontier x-axis) still needs a paid key —
+   `gemini-flash` free tier 429'd 130/150.
 
 8. **Task-agnostic eval** ✅ **Done.** The eval loop is no longer hardwired
    to financial sentiment: a task is a pack under `backend/tasks/<name>/`
@@ -241,7 +255,8 @@ a local model and hosted API models.
    2-value scale (5 or 2), never 3/4, so it agrees on *whether* the label is
    right but is not a calibrated 1–5 scorer. `scripts/serial_judge_run.py`
    added as a low-RAM in-process judge fallback (no Celery/Redis).
-   `docs/RESULTS.md` is the external walk-through of all three deliverables.
+   `docs/RESULTS.md` is the external walk-through of all four experiments
+   (fine-tune, prompt A/B, judge calibration, local-vs-hosted).
 
 ## Open decisions
 
