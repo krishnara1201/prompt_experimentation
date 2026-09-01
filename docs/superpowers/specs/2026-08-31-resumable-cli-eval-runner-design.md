@@ -108,7 +108,20 @@ uv run python -m scripts.serial_eval_run resume <run_id>
 
 uv run python -m scripts.serial_eval_run new --arms ... --dry-run   # print
     # the resolved arms + cell plan and exit, no Run row, no calls
+
+uv run python -m scripts.serial_eval_run resume <run_id> --max-cli-calls 30
+    # do at most 30 subscription-CLI calls this invocation, then stop
+    # cleanly (exit 0) — batches the CLI phase so it never drains the seat's
+    # usage window in one go. Also accepted on `new`.
 ```
+
+**`--max-cli-calls N`** (optional, both subcommands): caps *successful*
+subscription-CLI calls per invocation. On reaching the cap the runner stops
+exactly like a usage-limit pause (`Outcome.reason == "cli_batch_limit"`,
+exit 0, resume message) — no row is skipped or lost. Local-arm cells are
+never capped. Use it to leave headroom on a Claude seat that is **also
+driving an interactive session** (the operator's own `claude`): run the CLI
+phase as a few bounded batches instead of 150 back-to-back calls.
 
 - `new`: samples examples exactly as `POST /runs` does — filter
   `EvalExample.source == task_cfg.source`, `ORDER BY id`,

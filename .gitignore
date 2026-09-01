@@ -11,3 +11,4 @@ node_modules/
 
 backend/training/artifacts/
 backend/unsloth_compiled_cache/
+scratch_*.log

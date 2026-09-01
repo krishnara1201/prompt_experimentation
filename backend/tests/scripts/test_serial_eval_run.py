@@ -134,9 +134,56 @@ def test_run_cells_pauses_on_usage_limit_without_writing_a_row(monkeypatch):
         )
 
         assert outcome.paused is True
+        assert outcome.reason == "usage_limit"
         rows = asyncio.run(_results(run_id))
         assert len(rows) == 1  # only the first cell persisted
         assert adapter.calls == 2  # stopped at the limit, did not try cell 3
+    finally:
+        asyncio.run(_cleanup(run_id))
+
+
+@pytestmark_db
+def test_run_cells_stops_at_max_cli_calls_and_resume_continues(monkeypatch):
+    from scripts import serial_eval_run
+
+    monkeypatch.setattr(serial_eval_run, "engine", db_test_engine)
+    run_id, example_ids = asyncio.run(_seed_run(4, ["local", "cli"]))
+    chosen = [(eid, f"sentence {i}") for i, eid in enumerate(example_ids)]
+    try:
+        local = _ScriptedAdapter(["neutral"] * 4)
+        cli = _ScriptedAdapter(["neutral"] * 4)
+        arms = {
+            "local": Arm(name="local", adapter=local),
+            "cli": Arm(name="cli", adapter=cli),
+        }
+
+        outcome = asyncio.run(
+            serial_eval_run.run_cells(
+                run_id=run_id, chosen=chosen, arms=arms, cli_arms={"cli"},
+                task_name="financial_sentiment", max_cli_calls=2,
+            )
+        )
+
+        # local arm fully done; only 2 of 4 CLI cells (the batch cap)
+        assert outcome.paused is True
+        assert outcome.reason == "cli_batch_limit"
+        assert local.calls == 4
+        assert cli.calls == 2
+        rows = asyncio.run(_results(run_id))
+        assert len(rows) == 6
+
+        # resume finishes the remaining 2 CLI cells
+        cli2 = _ScriptedAdapter(["neutral"] * 2)
+        outcome2 = asyncio.run(
+            serial_eval_run.run_cells(
+                run_id=run_id, chosen=chosen,
+                arms={"local": Arm("local", local), "cli": Arm("cli", cli2)},
+                cli_arms={"cli"}, task_name="financial_sentiment", max_cli_calls=10,
+            )
+        )
+        assert outcome2.paused is False
+        assert cli2.calls == 2
+        assert len(asyncio.run(_results(run_id))) == 8
     finally:
         asyncio.run(_cleanup(run_id))
 

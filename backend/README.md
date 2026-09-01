@@ -125,12 +125,18 @@ uv run python -m scripts.serial_eval_run new \
 uv run python -m scripts.serial_eval_run resume <run_id>
 
 uv run python -m scripts.serial_eval_run new --arms ... --dry-run   # plan only
+
+# batch the CLI phase — at most 30 CLI calls per invocation, then stop:
+uv run python -m scripts.serial_eval_run resume <run_id> --max-cli-calls 30
 ```
 
 Non-CLI arms run first, so a mid-run pause only ever leaves CLI cells
-outstanding. The `arms.yaml` `claude-code-sonnet` arm (uncommented, since
-this path doesn't need the `subscription_cli` worker) is wired for exactly
-this. Judge the finished run with `scripts/serial_judge_run.py` as usual.
+outstanding. `--max-cli-calls N` caps subscription-CLI calls per invocation
+and stops cleanly at the cap — use it to leave usage-limit headroom when
+the same Claude seat is also driving an interactive session. The `arms.yaml`
+`claude-code-sonnet` arm (uncommented, since this path doesn't need the
+`subscription_cli` worker) is wired for exactly this. Judge the finished run
+with `scripts/serial_judge_run.py` as usual.
 
 ## Phase 2: Orchestration
 

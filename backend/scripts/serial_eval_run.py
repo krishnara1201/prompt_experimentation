@@ -59,6 +59,7 @@ class Outcome:
     ok: int
     fail: int
     remaining: int
+    reason: str | None = None  # "usage_limit" | "cli_batch_limit" when paused
 
 
 def plan_cells(
@@ -167,14 +168,30 @@ async def run_cells(
     cli_arms: set[str],
     task_name: str,
     repeats: int = 1,
+    max_cli_calls: int | None = None,
 ) -> Outcome:
     completed = await _completed_cells(run_id)
     cells = plan_cells(chosen, list(arms), repeats, cli_arms, completed)
     total = len(cells)
     print(f"run {run_id}: {total} cells outstanding ({len(completed)} already done)")
+    if max_cli_calls is not None:
+        print(f"  CLI-call budget this invocation: {max_cli_calls}")
 
-    ok = fail = 0
+    ok = fail = cli_ok = 0
     for i, cell in enumerate(cells, 1):
+        is_cli = cell.arm_name in cli_arms
+        if is_cli and max_cli_calls is not None and cli_ok >= max_cli_calls:
+            done_here = i - 1
+            print(
+                f"\nPAUSED: CLI-call budget ({max_cli_calls}) reached after "
+                f"{done_here}/{total} outstanding cells — leaves seat headroom."
+            )
+            print(f"  resume with:  uv run python -m scripts.serial_eval_run resume {run_id}")
+            return Outcome(
+                paused=True, retry_at=None, ok=ok, fail=fail,
+                remaining=total - done_here, reason="cli_batch_limit",
+            )
+
         adapter = arms[cell.arm_name].adapter
         prompt = arms[cell.arm_name].render(cell.example_text)
         try:
@@ -186,7 +203,10 @@ async def run_cells(
                 mins = max(0, int(delta.total_seconds() // 60))
                 print(f"  resets at {exc.retry_at:%Y-%m-%d %H:%M %Z} (~{mins} min)")
             print(f"  resume with:  uv run python -m scripts.serial_eval_run resume {run_id}")
-            return Outcome(paused=True, retry_at=exc.retry_at, ok=ok, fail=fail, remaining=total - (i - 1))
+            return Outcome(
+                paused=True, retry_at=exc.retry_at, ok=ok, fail=fail,
+                remaining=total - (i - 1), reason="usage_limit",
+            )
         except Exception as exc:  # noqa: BLE001 - record and continue
             await _persist(run_id, cell, "failed", error=str(exc))
             fail += 1
@@ -195,6 +215,8 @@ async def run_cells(
 
         await _persist(run_id, cell, "completed", response=response)
         ok += 1
+        if is_cli:
+            cli_ok += 1
         if i % 10 == 0:
             print(f"  {i}/{total}  ok={ok} fail={fail}")
 
@@ -253,7 +275,7 @@ async def _main_new(args) -> int:
         sample_size=args.sample_size, seed=args.seed, repeats=args.repeats,
     )
     print(f"created run {run_id} (seed={seed}, {len(chosen)} examples)")
-    return await _drive(run_id, chosen, arms, cli_arms, args.task, args.repeats)
+    return await _drive(run_id, chosen, arms, cli_arms, args.task, args.repeats, args.max_cli_calls)
 
 
 async def _main_resume(args) -> int:
@@ -264,13 +286,15 @@ async def _main_resume(args) -> int:
     arms, cli_arms = resolve_arms(run.task, run.arm_names)
     task_cfg = load_task(run.task)
     chosen = await _sample_examples(task_cfg.source, run.sample_size, run.seed)
-    return await _drive(args.run_id, chosen, arms, cli_arms, run.task, run.repeats)
+    return await _drive(
+        args.run_id, chosen, arms, cli_arms, run.task, run.repeats, args.max_cli_calls
+    )
 
 
-async def _drive(run_id, chosen, arms, cli_arms, task_name, repeats) -> int:
+async def _drive(run_id, chosen, arms, cli_arms, task_name, repeats, max_cli_calls=None) -> int:
     outcome = await run_cells(
         run_id=run_id, chosen=chosen, arms=arms, cli_arms=cli_arms,
-        task_name=task_name, repeats=repeats,
+        task_name=task_name, repeats=repeats, max_cli_calls=max_cli_calls,
     )
     if outcome.paused:
         return 0
@@ -292,9 +316,17 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--seed", type=int, default=None)
     new.add_argument("--repeats", type=int, default=1)
     new.add_argument("--dry-run", action="store_true")
+    new.add_argument(
+        "--max-cli-calls",
+        type=int,
+        default=None,
+        help="stop after this many subscription-CLI calls this invocation "
+        "(leaves usage-limit headroom); resume for the next batch",
+    )
 
     res = sub.add_parser("resume", help="continue an existing run")
     res.add_argument("run_id", type=int)
+    res.add_argument("--max-cli-calls", type=int, default=None)
 
     args = parser.parse_args(argv)
 
