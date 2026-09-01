@@ -41,6 +41,8 @@ class RunStatusResponse(BaseModel):
     run_id: int
     status: str
     task: str = "financial_sentiment"
+    created_at: datetime
+    arm_names: list[str]
     total_calls: int
     completed: int
     failed: int
@@ -212,6 +214,8 @@ async def get_run_status(run_id: int, session: AsyncSession = Depends(get_sessio
         run_id=run.id,
         status=status,
         task=run.task,
+        created_at=run.created_at,
+        arm_names=run.arm_names,
         total_calls=run.total_calls,
         completed=completed,
         failed=failed,

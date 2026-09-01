@@ -163,8 +163,8 @@ def write_frontier_png(summary: list[dict], out_path: Path) -> bool:
     except ImportError:
         return False
     max_cost = max((row.get("mean_cost_estimate_usd") or 0.0 for row in summary), default=0.0)
-    fig, ax = plt.subplots(figsize=(6, 4))
-    for row in summary:
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for i, row in enumerate(summary):
         x = row.get("mean_latency_ms") or 0
         y = row.get("mean_judge_score") or 0
         cost = row.get("mean_cost_estimate_usd")
@@ -176,11 +176,26 @@ def write_frontier_png(summary: list[dict], out_path: Path) -> bool:
         else:
             size = 40.0
             label = f"{row['arm_name']} ($0/call)"
-        ax.scatter(x, y, s=size)
-        ax.annotate(label, (x, y), fontsize=8, xytext=(4, 4), textcoords="offset points")
+        ax.scatter(x, y, s=size, zorder=3)
+        # Arms can land almost on top of each other (two local arms at the same
+        # latency/quality). Alternate the label above/below the point and draw a
+        # thin leader line so the text never overlaps another label.
+        dy = 14 if i % 2 == 0 else -14
+        ax.annotate(
+            label,
+            (x, y),
+            fontsize=8,
+            xytext=(0, dy),
+            textcoords="offset points",
+            ha="center",
+            va="bottom" if dy > 0 else "top",
+            arrowprops={"arrowstyle": "-", "color": "0.6", "lw": 0.6},
+        )
     ax.set_xlabel("mean latency (ms)")
     ax.set_ylabel("mean judge_score (1–5)")
     ax.set_title("Cost / latency / quality frontier (marker size = $/call)")
+    # Pad the axes so edge points and their labels stay inside the frame.
+    ax.margins(x=0.25, y=0.30)
     fig.tight_layout()
     fig.savefig(out_path, dpi=120)
     plt.close(fig)

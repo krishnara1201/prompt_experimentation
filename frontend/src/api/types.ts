@@ -43,6 +43,8 @@ export interface RunStatusResponse {
   run_id: number;
   status: string;
   task: string;
+  created_at: string;
+  arm_names: string[];
   total_calls: number;
   completed: number;
   failed: number;

@@ -314,6 +314,9 @@ def test_get_run_status_is_completed_when_all_succeed():
         assert body["completed"] == 2
         assert body["failed"] == 0
         assert body["pending"] == 0
+        # header fields for the dashboard run summary
+        assert body["arm_names"] == ["fake-arm"]
+        assert body["created_at"]
     finally:
         _delete_run(run_id)
         _delete_example(example_id)
