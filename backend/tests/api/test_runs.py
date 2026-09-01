@@ -182,6 +182,29 @@ def test_create_run_rejects_empty_arms_list(mock_task_cfg, mock_active, mock_loa
 @patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS_MIXED)
 @patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
 @patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
+def test_create_run_default_arms_excludes_subscription_cli_arms(mock_task_cfg, mock_active, mock_load_arms, mock_task):
+    # No `arms` filter -> every arm EXCEPT subscription-CLI ones, whose
+    # dedicated queue may have no worker (they hang forever). They still run
+    # when named explicitly.
+    example_id = _insert_example()
+    run_id = None
+    try:
+        response = TestClient(app).post("/runs", json={"repeats": 1, "sample_size": 1, "seed": 1})
+        assert response.status_code == 200
+        run_id = response.json()["run_id"]
+
+        armed = {call.kwargs["kwargs"]["arm_name"] for call in mock_task.apply_async.call_args_list}
+        assert armed == {"fake-arm"}
+    finally:
+        if run_id is not None:
+            _delete_run(run_id)
+        _delete_example(example_id)
+
+
+@patch("app.api.routes.runs.run_single_call")
+@patch("app.api.routes.runs.load_arms", return_value=FAKE_ARMS_MIXED)
+@patch("app.api.routes.runs.active_task_name", return_value="financial_sentiment")
+@patch("app.api.routes.runs.load_task", return_value=FAKE_TASK)
 def test_create_run_routes_arms_to_correct_queue(mock_task_cfg, mock_active, mock_load_arms, mock_task):
     example_id = _insert_example()
     run_id = None

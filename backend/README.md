@@ -63,11 +63,16 @@ Unlike every other arm type, these have no per-call price — `arms.yaml`
 should not set `price_per_1m_input`/`price_per_1m_output` on them, and
 `cost_estimate_usd` on their results is always `null`.
 
-These two arms ship commented out in `arms.yaml`, so `POST /runs` with no
-explicit `arms` filter (which defaults to every arm in the file) won't
-include them. Uncomment them only after the preconditions below are met —
-an authenticated CLI session and a running `subscription_cli` worker —
-otherwise their tasks queue forever with nothing consuming them.
+`POST /runs` with no explicit `arms` filter defaults to every arm **except**
+subscription-CLI ones — so an unqualified run never enqueues to the
+`subscription_cli` queue when nothing is consuming it. Run a subscription-CLI
+arm by naming it explicitly (`-a claude-code-sonnet`), and only after the
+preconditions below are met: an authenticated CLI session, and either a
+running `subscription_cli` worker (Celery path) or the no-Celery
+`serial_eval_run.py` (below).
+
+`arms.yaml` ships one such arm live (`claude-code-sonnet`) plus a commented
+`codex-subscription` example.
 
 **Precondition**: the machine running the Celery worker must already have
 an authenticated CLI session under your subscription — run `claude login`
@@ -101,6 +106,31 @@ uv run celery -A app.tasks.worker.celery_app worker -Q subscription_cli --concur
 Keep your existing worker command (`-Q celery`, or no `-Q` flag, which
 defaults to the same queue) running alongside it — one worker per queue,
 both pointed at the same Redis broker.
+
+### No-Celery alternative: `scripts/serial_eval_run.py`
+
+For a one-off paired comparison against a subscription-CLI arm — without
+running Redis + a second worker, and on a host where the full stack + a
+local model don't fit in RAM — use the in-process runner (same motivation
+as `serial_judge_run.py`). It also **pauses cleanly when the Claude seat
+hits its usage limit** and resumes once the window resets, instead of
+burning the outstanding calls as failures:
+
+```bash
+uv run python -m scripts.serial_eval_run new \
+  --arms qwen3-8b-local,claude-code-sonnet \
+  --task financial_sentiment --sample-size 150 --seed 20260831
+
+# after the usage window resets — idempotent, skips completed cells:
+uv run python -m scripts.serial_eval_run resume <run_id>
+
+uv run python -m scripts.serial_eval_run new --arms ... --dry-run   # plan only
+```
+
+Non-CLI arms run first, so a mid-run pause only ever leaves CLI cells
+outstanding. The `arms.yaml` `claude-code-sonnet` arm (uncommented, since
+this path doesn't need the `subscription_cli` worker) is wired for exactly
+this. Judge the finished run with `scripts/serial_judge_run.py` as usual.
 
 ## Phase 2: Orchestration
 

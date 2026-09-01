@@ -1,11 +1,12 @@
 import json
 import os
 import subprocess
+from datetime import timezone
 
 import pytest
 
 from app.adapters import claude_code_cli
-from app.adapters.claude_code_cli import ClaudeCodeCLIAdapter
+from app.adapters.claude_code_cli import ClaudeCodeCLIAdapter, UsageLimitError
 
 
 def _completed(returncode=0, stdout="", stderr=""):
@@ -77,6 +78,65 @@ def test_generate_raises_distinguishable_error_when_not_authenticated(monkeypatc
 
     with pytest.raises(RuntimeError, match="is not authenticated"):
         adapter.generate("hello")
+
+
+def test_usage_limit_from_result_text_parses_retry_at(monkeypatch):
+    # The CLI emits "Claude AI usage limit reached|<unix ts>" as the result.
+    payload = {"result": "Claude AI usage limit reached|1893456000", "is_error": True}
+    monkeypatch.setattr(
+        claude_code_cli.subprocess,
+        "run",
+        lambda *a, **k: _completed(returncode=1, stdout=json.dumps(payload)),
+    )
+    adapter = ClaudeCodeCLIAdapter(model="sonnet")
+
+    with pytest.raises(UsageLimitError) as excinfo:
+        adapter.generate("hello")
+
+    retry_at = excinfo.value.retry_at
+    assert retry_at is not None
+    assert retry_at.tzinfo is not None
+    assert int(retry_at.astimezone(timezone.utc).timestamp()) == 1893456000
+
+
+def test_usage_limit_from_api_error_status(monkeypatch):
+    payload = {"result": "", "is_error": True, "api_error_status": "rate_limit_error"}
+    monkeypatch.setattr(
+        claude_code_cli.subprocess,
+        "run",
+        lambda *a, **k: _completed(returncode=0, stdout=json.dumps(payload)),
+    )
+    adapter = ClaudeCodeCLIAdapter(model="sonnet")
+
+    with pytest.raises(UsageLimitError):
+        adapter.generate("hello")
+
+
+def test_usage_limit_from_stderr_phrase(monkeypatch):
+    monkeypatch.setattr(
+        claude_code_cli.subprocess,
+        "run",
+        lambda *a, **k: _completed(returncode=1, stderr="Error: usage limit exceeded for this account"),
+    )
+    adapter = ClaudeCodeCLIAdapter(model="sonnet")
+
+    with pytest.raises(UsageLimitError):
+        adapter.generate("hello")
+
+
+def test_bare_nonzero_exit_is_not_a_usage_limit(monkeypatch):
+    # Empty stderr, no JSON — the worker treats this as a rate-limit for
+    # backoff, but the adapter must NOT escalate it to a multi-hour pause.
+    monkeypatch.setattr(
+        claude_code_cli.subprocess,
+        "run",
+        lambda *a, **k: _completed(returncode=1, stderr=""),
+    )
+    adapter = ClaudeCodeCLIAdapter(model="sonnet")
+
+    with pytest.raises(RuntimeError) as excinfo:
+        adapter.generate("hello")
+    assert not isinstance(excinfo.value, UsageLimitError)
 
 
 def test_generate_raises_on_invalid_json(monkeypatch):

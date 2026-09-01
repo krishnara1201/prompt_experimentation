@@ -117,7 +117,7 @@ def run(
     sample: int = typer.Option(None, "--sample", "-n", help="Sample size (default: whole dataset)."),
     repeats: int = typer.Option(1, "--repeats", "-r", help="Repeats per example per arm."),
     seed: int = typer.Option(None, "--seed", help="RNG seed for the sample."),
-    arm: list[str] = typer.Option(None, "--arm", "-a", help="Arm name; repeatable (default: all arms)."),
+    arm: list[str] = typer.Option(None, "--arm", "-a", help="Arm name; repeatable (default: all arms except subscription-CLI)."),
     task: str = typer.Option(None, "--task", help="Task pack to run against (default: the active task in arms.yaml)."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Print only the new run id."),
 ):

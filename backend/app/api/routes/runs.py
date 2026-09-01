@@ -123,7 +123,18 @@ async def create_run(payload: RunCreateRequest, session: AsyncSession = Depends(
         ) from exc
 
     available_arms = load_arms(str(ARMS_PATH), task=task_cfg)
-    arm_names = payload.arms if payload.arms is not None else list(available_arms.keys())
+    if payload.arms is not None:
+        arm_names = payload.arms
+    else:
+        # The unqualified default is "every arm" — except subscription-CLI
+        # arms, whose dedicated `subscription_cli` queue may have no worker
+        # running (their tasks would hang forever). Name them explicitly to
+        # run them.
+        arm_names = [
+            name
+            for name, arm in available_arms.items()
+            if getattr(arm.adapter, "celery_queue", None) != "subscription_cli"
+        ]
     unknown = [name for name in arm_names if name not in available_arms]
     if unknown:
         raise HTTPException(status_code=400, detail=f"Unknown arm(s): {', '.join(unknown)}")
