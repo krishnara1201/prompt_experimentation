@@ -40,7 +40,7 @@ class RunCreateResponse(BaseModel):
 class RunStatusResponse(BaseModel):
     run_id: int
     status: str
-    task: str = "financial_sentiment"
+    task: str
     created_at: datetime
     arm_names: list[str]
     total_calls: int

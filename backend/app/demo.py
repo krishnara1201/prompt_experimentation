@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 from app.adapters.base import ModelResponse
 from app.config.arms import load_arms
+from app.config.tasks import active_task_name, load_task
 
 ARMS_PATH = Path(__file__).resolve().parent.parent / "arms.yaml"
 
@@ -33,7 +34,11 @@ def format_row(arm_name: str, prompt: str, response: ModelResponse) -> str:
 
 def main() -> None:
     load_dotenv()
-    arms = load_arms(str(ARMS_PATH))
+    # This demo sends raw PROMPTS straight to each adapter and never reads an
+    # arm's prompt_template, so the task only matters for consistency with
+    # every other load_arms call site.
+    task = load_task(active_task_name(str(ARMS_PATH)))
+    arms = load_arms(str(ARMS_PATH), task=task)
     for prompt in PROMPTS:
         for arm_name, arm in arms.items():
             try:

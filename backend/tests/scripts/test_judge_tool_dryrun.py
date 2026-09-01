@@ -2,15 +2,28 @@ import pytest
 
 from app.data.financial_phrasebank import PhrasebankExample
 from scripts.judge_tool_dryrun import (
+    LABELS,
     NEGATIVE_CASES,
     TOOL_NAME,
     format_row,
     sample_by_label,
+    synthetic_output,
 )
 
 
 def test_tool_name_is_the_generalised_judge_tool():
     assert TOOL_NAME == "score_output_against_gold"
+
+
+def test_synthetic_output_wrong_label_is_some_other_task_label():
+    # No hardcoded 3-class map: "wrong" is just another label in the active
+    # task, so this still holds if DEFAULT_TASK is ever repointed.
+    for label in LABELS:
+        ex = PhrasebankExample(text="x", label=label)
+        assert label in synthetic_output(ex, wrong=False)
+        wrong = synthetic_output(ex, wrong=True)
+        assert label not in wrong
+        assert any(other in wrong for other in LABELS if other != label)
 
 
 def _examples() -> list[PhrasebankExample]:

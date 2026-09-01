@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
@@ -9,6 +10,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.config.tasks import active_task_name, list_tasks, load_task
 from app.db.models import EvalExample
 from app.db.session import get_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -38,7 +41,13 @@ async def list_task_packs(
 
     out: list[TaskInfo] = []
     for name in list_tasks():
-        cfg = load_task(name)
+        # One malformed pack must not 500 the whole listing (mirrors
+        # routes/arms.py). Skip it, log it, keep going.
+        try:
+            cfg = load_task(name)
+        except (OSError, ValueError) as exc:
+            logger.warning("skipping task pack %r: %s", name, exc)
+            continue
         out.append(
             TaskInfo(
                 name=name,

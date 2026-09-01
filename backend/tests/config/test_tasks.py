@@ -62,9 +62,16 @@ def test_active_task_name_reads_top_level_task_key(tmp_path):
         ({"eval_prompt": "two {text} {bogus}"}, "bogus"),
         ({"rubric": "missing fields {gold_label}"}, "input_text"),
         ({"rubric": "all {input_text} {gold_label} {model_output} {oops}"}, "oops"),
+        (
+            {"rubric": "grade {input_text} {gold_label} {model_output}\nno score line"},
+            "SCORE:",
+        ),
         ({"format": "csv"}, "format"),
         ({"data": "nonexistent.jsonl"}, "data"),
         ({"label_names": ["only", "two"]}, "label_names"),
+        ({"name": "not-the-dir-name"}, "match"),
+        ({"source": 123}, "source"),
+        ({"description": ""}, "description"),
     ],
 )
 def test_task_config_validation_rejects_bad_config(tmp_path, mutation, error_fragment):
@@ -73,6 +80,7 @@ def test_task_config_validation_rejects_bad_config(tmp_path, mutation, error_fra
     dst = tmp_path / "mytask"
     shutil.copytree(src, dst)
     raw = yaml.safe_load((dst / "task.yaml").read_text())
+    raw["name"] = "mytask"  # match the copied dir; a mutation may override
     raw.update(mutation)
     (dst / "task.yaml").write_text(yaml.safe_dump(raw))
 

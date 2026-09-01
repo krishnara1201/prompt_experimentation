@@ -60,6 +60,23 @@ def normalize_sentence(s: str) -> str:
     return _WS.sub(" ", unicodedata.normalize("NFKC", s)).strip().casefold()
 
 
+def _int_to_word_map(task) -> dict[int, str]:
+    return dict(enumerate(task.label_names)) if task.label_names else {}
+
+
+def _map_int_label(label, int_to_word: dict[int, str], *, task: str, where: str) -> str:
+    """A raw dataset label -> the label word. Integer labels need the task's
+    `label_names` in task.yaml; string labels pass straight through."""
+    if not isinstance(label, int):
+        return str(label)
+    if not int_to_word:
+        raise ValueError(
+            f"int label {label!r} {where} but task '{task}' task.yaml needs "
+            f"`label_names` to map it"
+        )
+    return int_to_word[int(label)]
+
+
 def load_source_examples(cfg: TrainingConfig) -> list[tuple[str, str]]:
     """(sentence, label_word) pairs from the configured HF subset.
 
@@ -69,7 +86,7 @@ def load_source_examples(cfg: TrainingConfig) -> list[tuple[str, str]]:
 
     task = load_task(cfg.task)
     valid_labels = set(task.labels)
-    int_to_word = dict(enumerate(task.label_names)) if task.label_names else {}
+    int_to_word = _int_to_word_map(task)
 
     dataset = load_dataset(cfg.source_dataset, cfg.source_config)
     combined = concatenate_datasets(list(dataset.values()))
@@ -77,15 +94,9 @@ def load_source_examples(cfg: TrainingConfig) -> list[tuple[str, str]]:
     for row in combined:
         sentence = str(row["sentence"]).replace("\n", " ").strip()
         raw_label = row["label"]
-        if isinstance(raw_label, int):
-            if not int_to_word:
-                raise ValueError(
-                    f"int label {raw_label!r} in {cfg.source_dataset} but task "
-                    f"'{cfg.task}' task.yaml needs `label_names` to train from this source"
-                )
-            label = int_to_word[int(raw_label)]
-        else:
-            label = str(raw_label)
+        label = _map_int_label(
+            raw_label, int_to_word, task=cfg.task, where=f"in {cfg.source_dataset}"
+        )
         if label not in valid_labels:
             raise ValueError(f"Unexpected label {raw_label!r} in {cfg.source_dataset}")
         pairs.append((sentence, label))
@@ -137,23 +148,21 @@ def _write_jsonl(path: Path, rows: list[tuple[str, str]], eval_prompt: str) -> N
 def build_sft_dataset(cfg: TrainingConfig) -> DatasetBuildResult:
     task = load_task(cfg.task)
     valid_labels = set(task.labels)
-    int_to_word = dict(enumerate(task.label_names)) if task.label_names else {}
+    int_to_word = _int_to_word_map(task)
 
     source_rows = load_source_examples(cfg)
     # The real loader already maps int labels to words; this also covers a
     # monkeypatched / alternative loader that yields raw int labels. String
     # labels pass straight through unchanged.
-    resolved_rows: list[tuple[str, str]] = []
-    for sentence, label in source_rows:
-        if isinstance(label, int):
-            if not int_to_word:
-                raise ValueError(
-                    f"int label {label!r} from load_source_examples but task "
-                    f"'{cfg.task}' task.yaml has no `label_names` to map it"
-                )
-            label = int_to_word[int(label)]
-        resolved_rows.append((sentence, label))
-    source_rows = resolved_rows
+    source_rows = [
+        (
+            sentence,
+            _map_int_label(
+                label, int_to_word, task=cfg.task, where="from load_source_examples"
+            ),
+        )
+        for sentence, label in source_rows
+    ]
 
     eval_norm = {normalize_sentence(t) for t in fetch_eval_texts()}
 

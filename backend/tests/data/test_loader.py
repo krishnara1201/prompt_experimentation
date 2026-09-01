@@ -12,7 +12,7 @@ def _task(tmp_path, jsonl_lines, labels=("a", "b")):
         "name": "t", "description": "a test", "labels": list(labels),
         "source": "t", "data": "data.jsonl", "format": "jsonl",
         "eval_prompt": "x {text}",
-        "rubric": "{input_text} {gold_label} {model_output}",
+        "rubric": "{input_text} {gold_label} {model_output}\nSCORE: <1-5>\nRATIONALE: <text>",
     }))
     return load_task("t", tasks_dir=tmp_path.parent)
 

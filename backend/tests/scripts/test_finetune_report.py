@@ -25,7 +25,7 @@ BASE = "http://localhost:8000"
 
 def run_status(run_id=5, status="completed", total=20):
     return RunStatusResponse(
-        run_id=run_id, status=status, total_calls=total,
+        run_id=run_id, status=status, task="financial_sentiment", total_calls=total,
         completed=total, failed=0, pending=0,
         created_at="2026-08-30T00:00:00", arm_names=["base", "finetuned"],
     ).model_dump(mode="json")

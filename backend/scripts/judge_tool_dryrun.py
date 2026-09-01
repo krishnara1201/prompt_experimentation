@@ -114,7 +114,9 @@ def classify_prompt(sentence: str) -> str:
 def synthetic_output(example: PhrasebankExample, wrong: bool) -> str:
     label = example.label
     if wrong:
-        label = {"positive": "negative", "negative": "positive", "neutral": "positive"}[label]
+        # Any other label in the active task — no hardcoded 3-class map, so
+        # this survives DEFAULT_TASK being repointed.
+        label = next(other for other in LABELS if other != label)
     return f"This reads as {label} sentiment."
 
 

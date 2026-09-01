@@ -41,6 +41,11 @@ class UnknownTaskError(ValueError):
 @dataclass(frozen=True)
 class TaskConfig:
     name: str
+    # A sentence *fragment*, not prose: it fills the rubric's "{description}"
+    # slot ("You are grading a {description} model's response"), so it reads
+    # like "a financial-sentiment" / "a news-topic classification". `GET
+    # /tasks` also passes it through verbatim as the pack's human label — keep
+    # it short and grammatical in that position too.
     description: str
     labels: tuple[str, ...]
     source: str
@@ -89,6 +94,16 @@ def load_task(name: str, tasks_dir: Path | None = None) -> TaskConfig:
             f"{config_path} missing key(s): {', '.join(sorted(missing))}"
         )
 
+    for key in ("name", "description", "source"):
+        if not isinstance(raw[key], str) or not raw[key]:
+            raise InvalidTaskConfigError(f"'{key}' must be a non-empty string")
+
+    if raw["name"] != name:
+        raise InvalidTaskConfigError(
+            f"task pack directory is '{name}' but task.yaml says name: "
+            f"{raw['name']!r} — the two must match"
+        )
+
     labels = raw["labels"]
     if (
         not isinstance(labels, list)
@@ -112,6 +127,16 @@ def load_task(name: str, tasks_dir: Path | None = None) -> TaskConfig:
         _RUBRIC_FIELDS,
         {"input_text", "gold_label", "model_output"},
     )
+    # The score parser (app/judge/scorer.py) requires the judge to answer with
+    # 'SCORE: <1-5>' and 'RATIONALE:' lines; a rubric that never asks for that
+    # format makes every judge call raise JudgeParseError at run time, with no
+    # signal here. Catch it at load.
+    rubric_upper = raw["rubric"].upper()
+    if "SCORE:" not in rubric_upper or "RATIONALE:" not in rubric_upper:
+        raise InvalidTaskConfigError(
+            "'rubric' must instruct the judge to end with 'SCORE: <1-5>' and "
+            "'RATIONALE: <text>' lines — the score parser requires both"
+        )
 
     data_path = (task_dir / raw["data"]).resolve()
     if not data_path.is_file():

@@ -332,7 +332,12 @@ def test_load_arms_without_task_uses_legacy_default_template(tmp_path):
 
 def test_load_arms_with_task_uses_task_eval_prompt_for_unset_arms(tmp_path):
     from app.config.tasks import load_task
-    task = load_task("financial_sentiment")
+    from app.eval_prompt import EVAL_PROMPT_TEMPLATE
+    # ag_news, not financial_sentiment: financial_sentiment's eval_prompt is
+    # byte-identical to EVAL_PROMPT_TEMPLATE, so it can't tell "used the task
+    # prompt" from "fell back to the module default". ag_news differs.
+    task = load_task("ag_news")
+    assert task.eval_prompt != EVAL_PROMPT_TEMPLATE
     config_path = tmp_path / "arms.yaml"
     config_path.write_text(
         "arms:\n  - name: a\n    adapter: openai_compatible\n"
