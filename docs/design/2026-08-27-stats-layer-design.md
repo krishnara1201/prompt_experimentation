@@ -2,7 +2,7 @@
 
 Date: 2026-08-27
 Status: Approved for implementation
-Scope: Build phase 4 of the platform described in `CLAUDE.md` — paired
+Scope: part of the platform described in `docs/ARCHITECTURE.md` — paired
 significance testing, a Bayesian equivalence test, multiple-comparison
 correction, and a sample-size/power calculator, exposed via a new API
 router alongside the existing `runs` endpoints.
@@ -202,7 +202,7 @@ Postgres per test):
   run, 422 on too-few-paired-examples, correction only applied when more
   than one pair is returned.
 
-## Non-goals (this phase)
+## Non-goals
 
 - No dashboard/frontend consumption of these endpoints — that's Phase 5,
   designed against this contract once it exists.

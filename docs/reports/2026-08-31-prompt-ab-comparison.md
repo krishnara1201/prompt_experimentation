@@ -1,4 +1,4 @@
-# Prompt A/B — terse vs. chain-of-thought on AG News (Phase 8, Deliverable 2)
+# Prompt A/B — terse vs. chain-of-thought on AG News
 
 Run **559** (`completed`) — arms `ag-news-terse` and `ag-news-cot`, **same
 model** (`qwen3:8b`, Ollama, `reasoning_effort: none` so the model's native
@@ -14,7 +14,7 @@ per arm (480 total, 0 model-call failures). The two arms differ **only** in
 Quality metric is the LLM judge's 1–5 `judge_score` (judge: local `qwen3:8b`,
 native thinking **on**), binarised as `judge_score ≥ 4` = "label correct" for
 accuracy. This is the first non-financial task run through the platform — it
-exercises the Phase 8 task-pack path (`backend/tasks/ag_news/`) end to end.
+exercises the task-pack path (`backend/tasks/ag_news/`) end to end.
 
 > **Task:** AG News topic classification (Zhang, Zhao & LeCun 2015; derived
 > from the AG corpus / ComeToMyHead). 4 classes, stratified 120-row sample

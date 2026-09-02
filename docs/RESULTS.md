@@ -55,7 +55,7 @@ quantization — ~1.8× the throughput at *higher* accuracy. One-time training
 cost was about **$0.05** of GPU time.
 
 Full report:
-[`docs/superpowers/reports/2026-08-30-finetune-comparison.md`](superpowers/reports/2026-08-30-finetune-comparison.md).
+[`docs/reports/2026-08-30-finetune-comparison.md`](reports/2026-08-30-finetune-comparison.md).
 
 ---
 
@@ -85,7 +85,7 @@ This is the clearest demonstration of why the project exists: same data, two
 ways of reading it, opposite conclusions.
 
 Full report:
-[`docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md`](superpowers/reports/2026-08-31-prompt-ab-comparison.md).
+[`docs/reports/2026-08-31-prompt-ab-comparison.md`](reports/2026-08-31-prompt-ab-comparison.md).
 
 ---
 
@@ -122,7 +122,7 @@ as an accuracy proxy); it would not be fine for a task that needs partial
 credit.
 
 Full report:
-[`docs/superpowers/reports/2026-08-31-judge-calibration-financial.md`](superpowers/reports/2026-08-31-judge-calibration-financial.md).
+[`docs/reports/2026-08-31-judge-calibration-financial.md`](reports/2026-08-31-judge-calibration-financial.md).
 
 ---
 
@@ -160,7 +160,7 @@ Claude seat's usage limit and resumes after it resets** (the CLI arm ran in
 **Bottom line:** for batch financial sentiment where an occasional slow call
 is fine, local Qwen3-8B is a defensible replacement for hosted Sonnet; where
 p99 latency matters, it isn't. Full report:
-[`docs/superpowers/reports/2026-09-01-local-vs-cli-hosted.md`](superpowers/reports/2026-09-01-local-vs-cli-hosted.md).
+[`docs/reports/2026-09-01-local-vs-cli-hosted.md`](reports/2026-09-01-local-vs-cli-hosted.md).
 
 ### Still not done — a *metered* API arm
 

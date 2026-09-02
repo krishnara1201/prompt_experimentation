@@ -313,7 +313,7 @@ def finetune_report(
         False, "--force", help="Render even if the run has not reached a terminal state."
     ),
     out: str = typer.Option(
-        "../docs/superpowers/reports/2026-08-29-finetune-comparison.md", "--out"
+        "../docs/reports/2026-08-30-finetune-comparison.md", "--out"
     ),
 ):
     """Render the fine-tuned-vs-base-vs-API comparison report from a completed run."""

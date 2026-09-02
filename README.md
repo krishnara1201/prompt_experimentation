@@ -10,7 +10,7 @@ interchangeable, first-class arms in the same paired comparison, declared in
 ## Result: a QLoRA fine-tune beats base Qwen3-8B — and the paired test proves it
 
 50 financial-sentiment examples × 3 repeats per arm, same eval harness, LLM
-judge for quality ([full report](docs/superpowers/reports/2026-08-30-finetune-comparison.md)):
+judge for quality ([full report](docs/reports/2026-08-30-finetune-comparison.md)):
 
 | | base `qwen3:8b` | QLoRA fine-tune | paired result |
 |---|---|---|---|
@@ -19,38 +19,33 @@ judge for quality ([full report](docs/superpowers/reports/2026-08-30-finetune-co
 | latency / call | 6,744 ms | **3,804 ms** | −2,939 ms (1.77× faster), p = 1.6e-10 |
 | output tokens / call | 296.6 | **6.0** | ~49× fewer, p < 1e-15 |
 
-![cost / latency / quality frontier](docs/superpowers/reports/2026-08-30-finetune-frontier.png)
+![cost / latency / quality frontier](docs/reports/2026-08-30-finetune-frontier.png)
 
 A second experiment — a prompt A/B on AG News of a terse instruction vs. a
 "reason step by step" one — found **quality is a wash** (paired Wilcoxon
 corrected p = 0.37, Bayesian P(equivalent) = 1.00 at ε = 0.5) while CoT costs
 **~40× the output tokens**; an unpaired win-rate would have misread the 1.6-pt
 noise gap as a CoT win
-([full report](docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md)).
+([full report](docs/reports/2026-08-31-prompt-ab-comparison.md)).
 
 A third experiment **calibrates the LLM judge** against 50 hand-labeled
 financial-sentiment rows (blind to the judge's score): perfect agreement on
 label-correctness (Cohen's κ = 1.00), and the one disagreement pattern is the
 judge collapsing the 1–5 rubric to a binary
-([full report](docs/superpowers/reports/2026-08-31-judge-calibration-financial.md)).
+([full report](docs/reports/2026-08-31-judge-calibration-financial.md)).
 
 A fourth experiment answers the headline question with a **hosted arm**:
-local `qwen3:8b` vs. `claude-code-sonnet` (the `claude` CLI under a Max seat,
-no per-token bill), 150 Financial PhraseBank sentences. **Quality is not
-significantly different** (paired Wilcoxon corrected p = 0.10; 87.3% vs 92.0%
-raw accuracy; Bayesian P(within ±0.5) = 1.00, though underpowered at n = 150).
-Median latency is comparable (3.8 s vs 2.4 s); the local arm's weakness is a
-long latency tail under memory pressure, not headline quality
-([full report](docs/superpowers/reports/2026-09-01-local-vs-cli-hosted.md)).
+local `qwen3:8b` vs. `claude-code-sonnet` (the `claude` CLI under a
+subscription seat, no per-token bill), 150 Financial PhraseBank sentences.
+**Quality is not significantly different** (paired Wilcoxon corrected
+p = 0.10; 87.3% vs 92.0% raw accuracy; Bayesian P(within ±0.5) = 1.00).
+Median latency is comparable (3.8 s vs 2.4 s)
+([full report](docs/reports/2026-09-01-local-vs-cli-hosted.md)).
 
 **[`docs/RESULTS.md`](docs/RESULTS.md) is the readable walk-through of all
-four** — the question, what each found, and the remaining gap below.
-
-> **Remaining gap:** the hosted arm above is a flat-rate *subscription* seat,
-> not a *metered* per-token API — so the cost/quality frontier still has no
-> real dollar figure on its x-axis. A metered arm (GPT-4o-mini / Gemini /
-> Claude API) needs a paid key; the free Gemini tier 429'd 130/150 calls. The
-> pipeline is ready for it.
+four** — the question each asked and what each found. Every arm — local,
+hosted, subscription-seat, or fine-tuned — plugs into the same paired
+harness through a config edit.
 
 ## Dashboard
 
@@ -91,11 +86,11 @@ against a running stack.
 - **`pe` CLI** — one entrypoint over the whole loop (stack lifecycle, seeding,
   runs, stats, calibration)
 - **MCP judge tool** — `score_output_against_gold` (server `rubric-judge`),
-  for scoring a single candidate response from a Claude Code session
+  for scoring a single candidate response from a coding agent or MCP client
 
-Full write-up — motivation, the five core differentiators, build-phase
-history — is in [`CLAUDE.md`](CLAUDE.md). Executed experiments are under
-[`docs/superpowers/reports/`](docs/superpowers/reports/).
+Full write-up — motivation, the five core differentiators, component
+breakdown — is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Executed
+experiments are under [`docs/reports/`](docs/reports/).
 
 ## Getting started
 
@@ -128,7 +123,7 @@ score_output_against_gold(
 The active task (its label set + rubric) comes from `arms.yaml`'s `task:`
 key. From another MCP client, run the server directly:
 `uv run --directory backend python -m app.mcp_judge_server`. Signature and
-error cases: "Phase 6" in `backend/README.md`.
+error cases: "Agent-facing judge tool" in `backend/README.md`.
 
 That is the whole of Path A. It does **not** give you paired comparisons,
 repeated runs, calibration, or the dashboard — for those, use Path B.

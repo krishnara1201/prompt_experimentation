@@ -10,7 +10,7 @@ entry for the hosted arm.
 
 ## Why
 
-`CLAUDE.md` differentiator #4 (local-vs-hosted cost/latency/quality
+`docs/ARCHITECTURE.md` differentiator #4 (local-vs-hosted cost/latency/quality
 frontier) and Phase 7's Deliverable still has no hosted-API arm that has
 ever completed a paired run — the metered `gemini-flash` leg 429'd 130/150
 calls (`docs/RESULTS.md`, "The open gap"). The `claude_code_cli` adapter
@@ -253,7 +253,7 @@ forces), and `serial_judge_run` has judged it:
 
 - `GET /runs/<id>/compare?metric=judge_score` and `.../equivalence` give
   the paired local-vs-hosted result.
-- A short writeup at `docs/superpowers/reports/2026-08-31-local-vs-cli-hosted.md`
+- A short writeup at `docs/reports/2026-09-01-local-vs-cli-hosted.md`
   and a line in `docs/RESULTS.md` closing "The open gap".
 - Judge caveat noted: the judge is local `qwen3:8b`, the same base model
   as the `qwen3-8b-local` arm — self-preference could *understate* the

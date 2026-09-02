@@ -1,10 +1,10 @@
-# Phase 5: Dashboard — Design
+# Dashboard — Design Spec
 
 ## Purpose
 
 Give the win-rate/CI table, cost/latency/quality frontier, and judge
-calibration report described in `CLAUDE.md`'s Phase 5 a real UI, backed by
-the stats layer built in Phase 4. This is the first frontend in the project
+calibration report described in `docs/ARCHITECTURE.md` a real UI, backed by
+the stats layer. This is the first frontend in the project
 (`frontend/` does not exist yet), so it is scoped as a new subsystem: a
 small set of new read-only backend endpoints, plus a new React app that
 consumes them and the existing `/runs/{run_id}/compare` endpoint.
@@ -156,7 +156,7 @@ app, fixtures seeding `Run`/`RunResult`/`JudgeCalibrationLabel` rows):
 
 ### Stack
 
-- Vite + React + TypeScript (per `CLAUDE.md`).
+- Vite + React + TypeScript (per `docs/ARCHITECTURE.md`).
 - Tailwind CSS for styling.
 - Recharts for the frontier scatter.
 - `@tanstack/react-query` for data fetching; its `refetchInterval` gives
@@ -225,7 +225,7 @@ fetching for the same `runId` from the URL param.
   Arms missing a required field (e.g. the local Ollama arm has no cost) are
   plotted at x=0 with a note ("no per-token cost — local compute") rather
   than being dropped, since the local-vs-API cost story is the point of
-  this chart per `CLAUDE.md`.
+  this chart per `docs/ARCHITECTURE.md`.
 - **Calibration tab**: `GET /api/runs/{runId}/calibration` rendered as a
   small stat panel (n, Spearman r + p, Cohen's kappa, mean abs diff). On
   404 ("no calibration labels"), renders "No calibration sample recorded

@@ -1,4 +1,8 @@
-.superpowers/
+# local agent / assistant config — not part of the project
+CLAUDE.md
+AGENTS.md
+.claude/
+.mcp.local.json
 
 __pycache__/
 *.pyc

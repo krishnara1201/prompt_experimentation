@@ -2,21 +2,21 @@
 
 Date: 2026-08-25
 Status: Approved for implementation
-Scope: Build phase 1 of the platform described in `CLAUDE.md` — "unify local
+Scope: part of the platform described in `docs/ARCHITECTURE.md` — "unify local
 (Ollama) and API models behind one interface; get one local + one API arm
 running end to end on a handful of prompts."
 
 ## Context
 
-This is the first sub-project of a larger platform (see root `CLAUDE.md`).
-The repository is currently empty aside from `CLAUDE.md`. Later phases
+This is the first sub-project of a larger platform (see root `docs/ARCHITECTURE.md`).
+The repository is currently empty aside from `docs/ARCHITECTURE.md`. Later phases
 (orchestration, judge calibration, stats, dashboard) depend on this layer's
 interface being stable, but are explicitly out of scope here.
 
-Two decisions from `CLAUDE.md`'s "Open decisions" are resolved by this spec:
+Two decisions from `docs/ARCHITECTURE.md`'s "Open decisions" are resolved by this spec:
 
 - **Hardware**: smaller GPU, <16GB VRAM. Local model is **Qwen3-8B** via
-  Ollama, per the CLAUDE.md default for this hardware tier.
+  Ollama, per the `docs/ARCHITECTURE.md` default for this hardware tier.
 - **API model**: no key is available yet, and the user wants the platform to
   be model-agnostic with bring-your-own-key rather than hardcoded to a
   specific hosted provider. This changes the adapter design from "one
@@ -95,15 +95,15 @@ known). No persistence layer yet — that's phase 2 (Postgres).
 
 - Python project using `uv` (matches tooling used in the sibling
   `experimentation_copilot` repo).
-- No Postgres, Celery, or frontend yet — those arrive in later build phases
-  per `CLAUDE.md`.
+- No Postgres, Celery, or frontend yet — those come later
+  per `docs/ARCHITECTURE.md`.
 - Directories: `backend/app/adapters/` (the two adapter implementations +
   protocol), `backend/app/config/` (arm config loader), `backend/tests/`.
 
-## Out of scope (later phases)
+## Out of scope
 
 - Orchestration (Celery/Redis), Postgres persistence, judge layer, stats
-  layer, dashboard — per `CLAUDE.md` build phases 2–6.
+  layer, dashboard — per `docs/ARCHITECTURE.md`.
 - Multi-user/auth handling of API keys — single-user, env-var-based keys are
   sufficient for this project's stated purpose (portfolio demonstration, not
   a multi-tenant product).

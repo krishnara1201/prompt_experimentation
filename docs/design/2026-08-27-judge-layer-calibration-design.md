@@ -2,7 +2,7 @@
 
 Date: 2026-08-27
 Status: Approved for implementation
-Scope: Build phase 3 of the platform described in `CLAUDE.md` — a rubric-
+Scope: part of the platform described in `docs/ARCHITECTURE.md` — a rubric-
 based LLM-as-judge that scores every completed `RunResult`, plus a
 calibration workflow that checks judge/human agreement on a held-out sample
 before judge scores are trusted on a full run.
@@ -15,7 +15,7 @@ None` column, anticipating this phase, but nothing populates it yet.
 
 This is deliberately scoped to the judge itself. A separate, later spec will
 cover exposing judging as a callable tool for external/local agents (see
-`CLAUDE.md`'s "Build phases" — added there as a phase following this one) —
+`docs/ARCHITECTURE.md`'s "Build phases" — added there as a phase following this one) —
 that interface should be designed against a judge that already exists, not
 guessed at in parallel.
 
@@ -134,7 +134,7 @@ Three scripts under `backend/scripts/`, following the existing
 3. **`calibration_report.py --run-id X`** — joins `run_result.judge_score`
    against `judge_calibration_label.human_score` for that run, computes:
    - **Spearman correlation** (ordinal 1-5 scores; via `scipy.stats
-     .spearmanr`, already a project dependency per `CLAUDE.md`'s stats
+     .spearmanr`, already a project dependency per `docs/ARCHITECTURE.md`'s stats
      stack)
    - **Cohen's kappa** on binarized correct/incorrect (`score >= 4`),
      implemented as a small manual helper in `app/judge/calibration.py`
@@ -147,7 +147,7 @@ Three scripts under `backend/scripts/`, following the existing
    consumer (you, reading it before trusting the run's judge scores) until
    the dashboard phase.
 
-This is the artifact that satisfies the CLAUDE.md differentiator "judge
+This is the artifact that satisfies the `docs/ARCHITECTURE.md` differentiator "judge
 calibration is reported, not assumed" — judge scores on a full run are only
 trustworthy once this report has been run and reviewed for that run (or a
 representative run using the same judge config).
@@ -186,7 +186,7 @@ representative run using the same judge config).
 ## Out of scope
 
 - Exposing judge scoring as a tool other agents/processes can call directly
-  (planned as a later phase in `CLAUDE.md`, designed once this judge exists).
+  (planned as a later phase in `docs/ARCHITECTURE.md`, designed once this judge exists).
 - Any gating logic that blocks a run or its stats from proceeding based on
   calibration results — calibration is reported for you to read and decide,
   not automatically enforced.

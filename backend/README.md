@@ -1,11 +1,11 @@
 # Backend
 
-Phase 1 (model adapter layer) and Phase 2 (orchestration layer) of the LLM
-prompt-experimentation platform. Designs live at the repo root in
-`docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md` and
-`docs/superpowers/specs/2026-08-25-orchestration-layer-design.md`.
+The model adapter layer and orchestration layer of the LLM
+prompt-experimentation platform. Designs live in
+`docs/design/2026-08-25-model-adapter-layer-design.md` and
+`docs/design/2026-08-25-orchestration-layer-design.md`.
 
-## Phase 1: Model adapter layer
+## Model adapter layer
 
 A unified adapter interface so local (Ollama) and hosted API models are
 interchangeable behind one code path.
@@ -48,7 +48,7 @@ omit `prompt_template` to use the shared default in `app/eval_prompt.py`.
 `GET /arms` reports each arm's resolved template. Commented example in
 `arms.yaml` — plus the live `ag-news-terse` / `ag-news-cot` pair used for
 the executed AG News prompt A/B
-(`docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md`).
+(`docs/reports/2026-08-31-prompt-ab-comparison.md`).
 
 An `openai_compatible` arm may also set `extra_body:` — a mapping merged
 verbatim into every chat-completions request. The AG News arms use
@@ -81,7 +81,7 @@ credentials; they only shell out to whatever session already exists.
 
 **Tool use stays on.** Each call still runs from a fresh, empty scratch
 directory (created and torn down per call), so neither CLI has this repo's
-`CLAUDE.md`/`AGENTS.md` to discover by default, and there's nothing real in
+`AGENTS.md` (or similar agent-config) to discover by default, and there's nothing real in
 that directory for a tool call to touch.
 
 This is a context boundary, not a security sandbox, and the two CLIs differ
@@ -90,10 +90,10 @@ to the scratch directory. Claude Code's `--dangerously-skip-permissions`
 only disables the interactive approval prompt — it installs no OS sandbox,
 so its Bash/Write tools can reach anything the worker process's user
 account can reach, regardless of `cwd`. Only run the Claude Code arm on a
-host where that's an acceptable risk. A user-global `~/.claude/CLAUDE.md`,
-if the operator running the worker has one, also still loads regardless of
-`cwd` — point `CLAUDE_CONFIG_DIR` at a throwaway directory first if you
-need to rule that out too.
+host where that's an acceptable risk. A user-global agent config in
+`~/.claude/`, if the operator running the worker has one, also still loads
+regardless of `cwd` — point `CLAUDE_CONFIG_DIR` at a throwaway directory
+first if you need to rule that out too.
 
 **Run a second, low-concurrency worker for these arms** — a CLI subprocess
 call is heavier than an HTTP call, and a subscription session may not
@@ -138,7 +138,7 @@ the same Claude seat is also driving an interactive session. The `arms.yaml`
 `subscription_cli` worker) is wired for exactly this. Judge the finished run
 with `scripts/serial_judge_run.py` as usual.
 
-## Phase 2: Orchestration
+## Orchestration
 
 Runs (eval set) × (arms) × (N repeats) as async Celery jobs and persists
 every call to Postgres.
@@ -182,7 +182,7 @@ docker compose run --rm migrate uv run python -m scripts.seed_eval_examples --ta
 
 ### Bring your own task
 
-The eval loop is task-agnostic (Phase 8). A **task pack** is a directory
+The eval loop is task-agnostic. A **task pack** is a directory
 under `backend/tasks/<name>/` with two things:
 
 ```
@@ -277,12 +277,12 @@ path.
 | `pe stats compare RUN_ID [-m METRIC]` | pairwise paired comparison |
 | `pe stats equivalence RUN_ID --local A --api B [--eps E]` | Bayesian equivalence (judge_score) |
 | `pe stats power RUN_ID --arm-a A --arm-b B` | required sample size for the observed effect |
-| `pe calibrate select \| import \| report …` | the Phase 3 calibration scripts (run on the host — need a local `.env` with a `localhost` `DATABASE_URL`) |
+| `pe calibrate select \| import \| report …` | the calibration scripts (run on the host — need a local `.env` with a `localhost` `DATABASE_URL`) |
 
 `PE_API_URL` overrides the API base (default `http://localhost:8000`).
 `uv run pe --help` documents every command.
 
-## Phase 3: Judge layer + calibration
+## Judge layer + calibration
 
 Every successfully completed `RunResult` is automatically scored 1-5 by a
 rubric-based LLM judge (configured via the separate `judge:` key in
@@ -302,7 +302,7 @@ provider is stricter. A subscription-CLI judge should still get the
 dedicated low-concurrency worker below.
 
 **Before trusting `judge_score` on a full run**, run the calibration
-workflow — CLAUDE.md's differentiator is that judge calibration is
+workflow — `docs/ARCHITECTURE.md`'s differentiator is that judge calibration is
 reported, not assumed:
 
 ### 1. Select a stratified sample to hand-label
@@ -348,9 +348,9 @@ Prints Spearman correlation and Cohen's kappa (score >= 4 treated as
   itself an arm (a commented `gpt-4o` snippet sits right above the `judge:`
   block), then re-run calibration.
 
-## Phase 6: Agent-facing judge tool
+## Agent-facing judge tool
 
-Exposes the judge layer (Phase 3) as an MCP tool so a coding agent (e.g. a
+Exposes the judge layer as an MCP tool so a coding agent (e.g. a
 Claude Code session iterating on a prompt) can score one candidate response
 against a gold label directly — no eval run, no Celery, no Postgres. It
 calls the **active task's** rubric and the `judge:` config from the
@@ -489,7 +489,7 @@ Two things to watch when switching:
 
 A single ad-hoc score is a quick signal, not a verdict. The tool response
 is deliberately silent on calibration — before relying on judge scores at
-scale, run the Phase 3 calibration workflow (`select_calibration_sample` →
+scale, run the calibration workflow (`select_calibration_sample` →
 `import_calibration_labels` → `calibration_report`) so you know how well
 this judge agrees with human labels.
 
@@ -572,7 +572,7 @@ or the adapters.
   tool error — no retries; the calling agent decides whether to retry or
   rephrase.
 
-## Phase 7: local fine-tune
+## Local fine-tune
 
 QLoRA fine-tune of the local model on the financial-sentiment task, served
 through Ollama as a normal `openai_compatible` arm.
@@ -588,7 +588,7 @@ through Ollama as a normal `openai_compatible` arm.
   reads `eval_example` to guarantee the training data is disjoint from it.
 
 Resolved dependency versions from the run that produced
-`docs/superpowers/reports/2026-08-29-finetune-comparison.md` (RTX 4070 12 GB):
+`docs/reports/2026-08-30-finetune-comparison.md` (RTX 4070 12 GB):
 `unsloth==2026.8.22`, `torch==2.11.0+cu130`, `transformers==5.5.0`,
 `trl==0.24.0`, `peft==0.20.0`, `datasets==4.x`, `bitsandbytes` (current).
 Note `datasets>=4` rejects script-based HF datasets — see Fallbacks for the

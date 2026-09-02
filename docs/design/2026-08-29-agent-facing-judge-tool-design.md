@@ -2,14 +2,14 @@
 
 Date: 2026-08-29
 Status: Approved for implementation
-Scope: Build phase 6 of the platform described in `CLAUDE.md` — expose the
+Scope: part of the platform described in `docs/ARCHITECTURE.md` — expose the
 existing judge layer (phase 3) as a callable tool so local coding agents
 (e.g. Claude Code sessions) can score a candidate financial-sentiment
 response directly, independent of the eval-run pipeline.
 
 ## Context
 
-Phase 3 (`docs/superpowers/specs/2026-08-27-judge-layer-calibration-design.md`)
+Phase 3 (`docs/design/2026-08-27-judge-layer-calibration-design.md`)
 built `score_output(adapter, input_text, gold_label, model_output) ->
 JudgeResult` in `backend/app/judge/scorer.py` — already a pure function with
 no dependency on Celery or Postgres. That spec deliberately deferred "expose
@@ -60,7 +60,7 @@ through.
 
 The rubric stays fixed — the same `rubric.py` template used by the
 automated pipeline, reference-guided against `gold_label`. The tool is
-scoped to financial-sentiment grading, matching `CLAUDE.md`'s non-goal of
+scoped to financial-sentiment grading, matching `docs/ARCHITECTURE.md`'s non-goal of
 not being a general-purpose LLM chat/eval tool. The tool's docstring states
 this scope explicitly so a calling agent understands what it's for.
 
@@ -199,10 +199,10 @@ testing stops at the plain-Python function boundary.
 
 ## Out of scope
 
-- Arbitrary/custom rubrics per call (rejected in brainstorming — keeps this
+- Arbitrary/custom rubrics per call (rejected during design — keeps this
   tool's output backed by the same rubric the calibration work already
   validated, and keeps the project scoped to financial-sentiment grading
-  per `CLAUDE.md`'s non-goals).
+  per `docs/ARCHITECTURE.md`'s non-goals).
 - Persisting ad-hoc calls to Postgres (rejected — this tool is for
   disposable checks during iteration, not part of the auditable
   `RunResult`/judge-score history; adding a log table would couple a

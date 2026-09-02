@@ -1,8 +1,8 @@
-# Phase 7 — Local LoRA fine-tune + fine-tuned-vs-base-vs-API comparison
+# Local LoRA fine-tune + fine-tuned-vs-base-vs-API comparison — Design Spec
 
 Date: 2026-08-29
 Status: Approved (design)
-Phase: 7 (stretch, per `CLAUDE.md`)
+Scope: a stretch extension of the platform described in `docs/ARCHITECTURE.md`
 
 ## Goal
 
@@ -17,7 +17,7 @@ just the capability.
 ## Non-goals
 
 - Not a hosted-model fine-tune (only the local model is a candidate — see
-  `CLAUDE.md` non-goals).
+  `docs/ARCHITECTURE.md` non-goals).
 - Not an HTTP/Celery-driven training service. Fine-tuning is a host-side
   workflow (`app/training/` + `pe finetune` + host scripts), mirroring the
   judge-calibration workflow. No `POST /finetune`.
@@ -49,7 +49,7 @@ just the capability.
   `backend_script()` in `app/cli/_shell.py`.
 - Hardware: RTX 4070, 12 GB VRAM. Ollama running locally.
 
-## Design decisions (resolved during brainstorming)
+## Design decisions (resolved during design)
 
 | Decision | Choice | Rationale |
 |---|---|---|
@@ -241,7 +241,7 @@ scripts wrapping `app/judge/`):
 
 ### 7. Comparison run + report
 
-Workflow (documented in `backend/README.md` + `CLAUDE.md` Phase 7):
+Workflow (documented in `backend/README.md` + `docs/ARCHITECTURE.md`):
 
 1. `pe finetune prep` → `train` → `export`; paste snippet into `arms.yaml`
    as `ft-qwen3-8b-local`.
@@ -257,7 +257,7 @@ Workflow (documented in `backend/README.md` + `CLAUDE.md` Phase 7):
 - Pulls `GET /runs/{id}/summary`, `/compare`, `/equivalence` from
   `$PE_API_URL` (reuse `app/cli/_api.py` helpers if importable, else
   `httpx`).
-- Renders `docs/superpowers/reports/2026-08-29-finetune-comparison.md`:
+- Renders `docs/reports/2026-08-30-finetune-comparison.md`:
   - Run metadata (arms, N, sample size, seed, judge model).
   - **Win-rate / quality table**: for each pair (ft vs base; ft vs each
     API arm) — mean `judge_score` diff, bootstrap CI, Holm-corrected
@@ -265,7 +265,7 @@ Workflow (documented in `backend/README.md` + `CLAUDE.md` Phase 7):
   - **Bayesian equivalence**: `P(judge_score_ft ≥ judge_score_api − ε)`
     for `--epsilon` (default 0.5 on the 1–5 scale), per API arm.
   - **Cost / latency / quality frontier**: a committed matplotlib PNG
-    (`docs/superpowers/reports/2026-08-29-finetune-frontier.png`) —
+    (`docs/reports/2026-08-30-finetune-frontier.png`) —
     x = mean latency, y = mean judge_score, marker size/label = cost —
     plus the underlying table.
   - **Training-cost accounting**: one-time cost = training wall-clock
@@ -387,9 +387,9 @@ training = [
 
 ## Documentation updates
 
-- `CLAUDE.md` — mark Phase 7 done with a one-paragraph summary and spec
+- `docs/ARCHITECTURE.md` — note the fine-tune workflow with a one-paragraph summary and spec
   link.
-- `backend/README.md` — a "Phase 7: local fine-tune" section: the
+- `backend/README.md` — a "Local fine-tune" section: the
   `training` extra, `training.yaml`, the `pe finetune prep|train|export`
   flow, pasting the arm snippet, running the comparison, generating the
   report, and the toolchain/VRAM fallbacks.

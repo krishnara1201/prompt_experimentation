@@ -2,7 +2,7 @@
 
 Date: 2026-08-30
 Status: Approved (design)
-Phase: 8 (extends "prompts as arms", per `CLAUDE.md`)
+Scope: extends "prompts as arms" in the platform described in `docs/ARCHITECTURE.md`
 
 ## Goal
 
@@ -87,7 +87,7 @@ on a non-financial dataset (AG News) with a written report — see
   `calibration_report.py` uses `CORRECT_THRESHOLD = 4`. **No changes
   needed.**
 
-## Design decisions (resolved during brainstorming)
+## Design decisions (resolved during design)
 
 | Decision | Choice | Rationale |
 |---|---|---|
@@ -97,7 +97,7 @@ on a non-financial dataset (AG News) with a written report — see
 | Which run's rubric the judge uses | The task recorded on the run, passed through Celery kwargs | The global `arms.yaml` `task:` can change between a run starting and its judge tasks firing. The run must be self-consistent. |
 | Data file format | JSONL (`{"text", "gold_label"}` per line) default; `phrasebank` format for the existing `@`-delimited file | New tasks use the obvious format; the vendored financial file stays untouched. |
 | Blast radius | Orchestrator + seed + judge **and** MCP judge server **and** training dataset builder | User chose full generalization so a non-financial task is fine-tunable and agent-scoreable too. |
-| Frontend | Minimal: a task dropdown in `NewRunForm` + task shown on the run header | Otherwise the dashboard can't drive a non-default task, breaking the "no curl needed" story in `CLAUDE.md`. |
+| Frontend | Minimal: a task dropdown in `NewRunForm` + task shown on the run header | Otherwise the dashboard can't drive a non-default task, breaking the "no curl needed" story in `docs/ARCHITECTURE.md`. |
 | Backward compatibility | `financial_sentiment/task.yaml` carries the **current** eval prompt + rubric text **verbatim** | Existing behaviour byte-identical; existing judge-calibration numbers stay valid. |
 
 ## Architecture
@@ -432,20 +432,20 @@ the plan can scope it:
   `pe stats power`. Frontier scatter (latency/tokens vs judge score) —
   CoT should cost materially more tokens/latency for whatever quality it
   buys.
-- **Report** — `docs/superpowers/reports/2026-08-31-prompt-ab-comparison.md`
+- **Report** — `docs/reports/2026-08-31-prompt-ab-comparison.md`
   + `2026-08-31-prompt-ab-frontier.png`, same structure as
   `2026-08-30-finetune-comparison.md`. Honest result either way: the point
   is that the paired test resolves a small effect an unpaired win-rate
   wouldn't.
-- **CLAUDE.md** — add a Phase 8 bullet and flip the "feature exists but no
+- **`docs/ARCHITECTURE.md`** — describe task packs and flip the "feature exists but no
   run has used it" gap.
 
 ## Rollout / sequencing
 
-1. This spec → plan (`superpowers:writing-plans`).
+1. This spec → plan.
 2. Implement task-agnostic eval (all changes above), full test suite green,
    `financial_sentiment` regression proven byte-identical.
-3. Commit; update `CLAUDE.md` architecture section (task packs) + the
+3. Commit; update `docs/ARCHITECTURE.md` architecture section (task packs) + the
    `backend/README.md` "Data & license" / dataset-swap notes.
 4. Deliverable 2 as its own bounded task: build the AG News pack, run,
    calibrate, analyze, write the report.

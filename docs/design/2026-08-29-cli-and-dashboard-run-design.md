@@ -125,7 +125,7 @@ Stats (HTTP, `pe stats` sub-app):
 
 Calibration (`pe calibrate` sub-app) — these need DB access and read/write
 a local JSON file you hand-label, so they run on the **host** exactly as
-`backend/README.md` Phase 3 documents (`uv run python -m scripts.*` with
+the "Judge layer + calibration" section of `backend/README.md` documents (`uv run python -m scripts.*` with
 cwd = `backend/`, requires a local `.env` with a `localhost` `DATABASE_URL`):
 
 | Command | Runs |
@@ -208,7 +208,7 @@ only Docker + uv. Overridable sample/repeat counts via env vars.
 - `backend/README.md`: add a "`pe` CLI" subsection with the command
   table; keep the `curl` examples (they still document the raw API) but
   note `pe` as the friendlier path.
-- `CLAUDE.md`: one line under the architecture/run notes pointing at the
+- `docs/ARCHITECTURE.md`: one line under the architecture/run notes pointing at the
   CLI and `demo.sh`.
 - `.env.example`: document `PE_API_URL` as an optional override.
 

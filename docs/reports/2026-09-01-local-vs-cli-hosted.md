@@ -7,7 +7,7 @@ all-agree sentences**, 1 repeat = 150 calls per arm, **300 total, 0
 model-call failures**. Both arms use the task's default eval prompt — a fair
 paired prompt.
 
-This is the run the project was built to produce: `CLAUDE.md` differentiator
+This is the run the project was built to produce: `docs/ARCHITECTURE.md` differentiator
 #4 (a local-vs-hosted cost/latency/quality frontier) and the Phase 7
 deliverable both needed a hosted arm that actually completes a paired run.
 The metered `gemini-flash` attempt never did (free-tier 429s — see

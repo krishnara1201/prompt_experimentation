@@ -220,7 +220,7 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Render the report even if the run has not reached a terminal state.",
     )
-    parser.add_argument("--out", default="../docs/superpowers/reports/2026-08-29-finetune-comparison.md")
+    parser.add_argument("--out", default="../docs/reports/2026-08-30-finetune-comparison.md")
     args = parser.parse_args(argv)
 
     status_meta = _get(f"/runs/{args.run_id}")

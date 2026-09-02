@@ -2,13 +2,13 @@
 
 Date: 2026-08-25
 Status: Approved for implementation
-Scope: Build phase 2 of the platform described in `CLAUDE.md` — wire Celery +
+Scope: part of the platform described in `docs/ARCHITECTURE.md` — wire Celery +
 Redis to run (eval set) x (arms) x (N repeats) as async jobs, and persist raw
 outputs to Postgres.
 
 ## Context
 
-Phase 1 (see `docs/superpowers/specs/2026-08-25-model-adapter-layer-design.md`)
+Phase 1 (see `docs/design/2026-08-25-model-adapter-layer-design.md`)
 delivered a stable `ModelAdapter` protocol with two adapter implementations,
 config-driven arms (`backend/arms.yaml`), and a demo script that runs a
 handful of hardcoded prompts through every arm synchronously with no
@@ -19,7 +19,7 @@ run against a configurable subset of arms, with N repeats per (example, arm)
 pair, executed as background jobs and persisted to Postgres so later phases
 (judge calibration, stats, dashboard) have something to read.
 
-This resolves two open decisions from `CLAUDE.md`:
+This resolves two open decisions from `docs/ARCHITECTURE.md`:
 
 - **Eval dataset**: Financial PhraseBank, 100%-annotator-agreement subset
   (~2,264 sentences). Chosen over FiQA and over the noisier 50/66/75%-agreement
@@ -96,7 +96,7 @@ Three new tables (SQLModel, Postgres via Alembic migration):
   - `cost_estimate_usd: float | None`
   - `judge_score: float | None` — nullable, populated by Phase 3. Included
     now (rather than added via a later migration) because it's named
-    explicitly alongside latency/tokens/cost in CLAUDE.md's results-store
+    explicitly alongside latency/tokens/cost in `docs/ARCHITECTURE.md`'s results-store
     description, and Phase 3 will be writing into this same table's existing
     rows rather than creating a new one.
   - `status: str` (`completed` / `failed`)
@@ -201,7 +201,7 @@ New `backend/pyproject.toml` dependencies: `celery[redis]`, `sqlmodel`,
   client, with Celery's `.delay()` mocked so these tests don't require a live
   worker or Redis.
 
-## Out of scope (later phases)
+## Out of scope
 
 - Judge-as-LLM scoring and calibration (Phase 3) — `RunResult.judge_score`
   exists as a column now but stays `NULL` until Phase 3 populates it.

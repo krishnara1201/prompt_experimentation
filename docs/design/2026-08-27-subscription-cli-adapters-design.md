@@ -2,14 +2,14 @@
 
 Date: 2026-08-27
 Status: Approved for implementation
-Scope: Extends build phase 1 (model adapter layer) of the platform described
-in `CLAUDE.md` — adds a third category of arm alongside "local weights" and
+Scope: Extends the model adapter layer of the platform described
+in `docs/ARCHITECTURE.md` — adds a third category of arm alongside "local weights" and
 "pay-per-token API": a subscription-seat CLI, driven non-interactively, with
 no per-token price.
 
 ## Context
 
-`CLAUDE.md`'s differentiator #4 is a cost/latency/quality frontier, not a
+`docs/ARCHITECTURE.md`'s differentiator #4 is a cost/latency/quality frontier, not a
 single leaderboard number. Today every arm is either free-to-run local
 compute (Ollama) or a metered, per-token-priced API call
 (`OpenAICompatibleAdapter`, `AnthropicAdapter`). There is a third real-world
@@ -47,7 +47,7 @@ These were confirmed with the user before writing this spec:
    runs from a **fresh, empty scratch directory**, never this repo's
    working directory. Running hundreds of unattended agentic calls with
    file-editing tools enabled against the real codebase is an unacceptable
-   blast radius, and letting the CLI read this repo's `CLAUDE.md` would
+   blast radius, and letting the CLI read this repo's own files would
    bias every response. An empty directory keeps tools "on" while giving
    them nothing real to read or write.
 5. **Concurrency**: these arms get a lower concurrency cap than API arms,
